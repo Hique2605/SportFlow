@@ -1,0 +1,47 @@
+info:
+  name: 01 - Criar usuario
+  type: http
+  seq: 1
+
+http:
+  method: POST
+  url: http://localhost:8080/usuarios
+  body:
+    type: json
+    data: |-
+      {
+        "nome": "Lucas Teste",
+        "email": "lucas.teste.001@sportflow.test",
+        "senha": "12345678",
+        "telefone": "11999999999"
+      }
+  auth: inherit
+
+runtime:
+  scripts:
+    - type: before-request
+      code: bru.setVar("usuarioEmail", "bruno-" + Date.now() + "-" + Math.floor(Math.random() * 100000) + "@sportflow.test");
+    - type: after-response
+      code: |-
+        if (res.status === 201 && res.body && res.body.id) {
+          bru.setVar("usuarioId", res.body.id);
+        }
+    - type: tests
+      code: |-
+        test("retorna 201 e um UUID", function () {
+          expect(res.status).to.equal(201);
+          expect(res.body.id).to.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
+        });
+        test("retorna os dados sem a senha", function () {
+          expect(res.body.nome).to.equal("Usuario Bruno");
+          expect(res.body.email).to.equal(bru.getVar("usuarioEmail"));
+          expect(res.body.ativo).to.equal(true);
+          expect(res.body).to.not.have.property("senha");
+        });
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+  forwardAuthorizationHeader: true

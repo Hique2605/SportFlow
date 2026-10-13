@@ -15,7 +15,7 @@ import java.util.UUID;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class AvaliacaoEntity {
+public class Avaliacao {
 
     @Id
     @GeneratedValue
@@ -23,12 +23,8 @@ public class AvaliacaoEntity {
     private UUID id;
 
     @OneToOne(fetch = FetchType.LAZY)
-    @JoinColumn(
-            name = "agendamento_id",
-            nullable = false,
-            unique = true
-    )
-    private AgendamentoEntity agendamento;
+    @JoinColumn(name = "agendamento_id",nullable = false,unique = true)
+    private Agendamento agendamento;
 
     @Column(nullable = false)
     private Short nota;

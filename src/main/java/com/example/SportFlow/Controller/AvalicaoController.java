@@ -1,7 +1,6 @@
 package com.example.SportFlow.Controller;
 
-import com.example.SportFlow.Entity.AvaliacaoEntity;
-import com.example.SportFlow.Repository.AvaliacaoRepository;
+import com.example.SportFlow.Entity.Avaliacao;
 import com.example.SportFlow.Service.AvaliacaoService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -18,22 +17,22 @@ public class AvalicaoController {
     private AvaliacaoService avaliacaoService;
 
     @GetMapping
-    public List<AvaliacaoEntity> listar() {
+    public List<Avaliacao> listar() {
         return avaliacaoService.findAll();
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<AvaliacaoEntity> buscar(@PathVariable UUID id) {
+    public ResponseEntity<Avaliacao> buscar(@PathVariable UUID id) {
         return ResponseEntity.ok(avaliacaoService.findById(id));
     }
 
     @PostMapping
-    public AvaliacaoEntity criar(@RequestBody AvaliacaoEntity avaliacaoEntity) {
-        return avaliacaoService.save(avaliacaoEntity);
+    public Avaliacao criar(@RequestBody Avaliacao avaliacao) {
+        return avaliacaoService.save(avaliacao);
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<AvaliacaoEntity> atualizar( @RequestBody AvaliacaoEntity usuario) {
+    public ResponseEntity<Avaliacao> atualizar(@RequestBody Avaliacao usuario) {
         try {
             return ResponseEntity.ok(avaliacaoService.update(usuario));
         } catch (RuntimeException e) {

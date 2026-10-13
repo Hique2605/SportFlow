@@ -17,7 +17,7 @@ import java.util.UUID;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class PagamentoEntity {
+public class Pagamento {
 
     @Id
     @GeneratedValue
@@ -30,7 +30,7 @@ public class PagamentoEntity {
             nullable = false,
             unique = true
     )
-    private AgendamentoEntity agendamento;
+    private Agendamento agendamento;
 
     @Column(nullable = false, precision = 10, scale = 2)
     private BigDecimal valor;

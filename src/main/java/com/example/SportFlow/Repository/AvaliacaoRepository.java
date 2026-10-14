@@ -8,5 +8,6 @@ import java.util.UUID;
 
 @Repository
 public interface AvaliacaoRepository extends JpaRepository<AvaliacaoEntity,UUID> {
-
+    boolean existsByAgendamento_Id(UUID agendamentoId);
+    boolean existsByAgendamento_IdAndIdNot(UUID agendamentoId, UUID id);
 }

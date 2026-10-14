@@ -1,13 +1,23 @@
 package com.example.SportFlow.Entity;
 
 import jakarta.persistence.*;
-import java.util.UUID;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+
 import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.util.UUID;
 
 @Entity
 @Table(name = "esporte")
+@Getter
+@Setter
+@NoArgsConstructor
 public class Esporte {
+
     @Id
+    @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
     @Column(nullable = false, length = 100, unique = true)
@@ -16,33 +26,23 @@ public class Esporte {
     @Column(columnDefinition = "TEXT")
     private String descricao;
 
+    @Column(nullable = false)
+    private boolean ativo = true;
+
     @Column(name = "criado_em", nullable = false, updatable = false)
     private OffsetDateTime criadoEm;
+
     @Column(name = "atualizado_em", nullable = false)
     private OffsetDateTime atualizadoEm;
 
     @PrePersist
-    void onCreate() {
-        if (id == null) {
-            id = UUID.randomUUID();
-        }
-
-        criadoEm = OffsetDateTime.now();
+    private void aoCriar() {
+        criadoEm = OffsetDateTime.now(ZoneOffset.UTC);
         atualizadoEm = criadoEm;
     }
 
     @PreUpdate
-    void onUpdate() { atualizadoEm = OffsetDateTime.now(); }
-
-    public UUID getId() { return id; }
-
-    public String getNome() { return nome; }
-    public void setNome(String value) { this.nome = value; }
-
-    public String getDescricao() { return descricao; }
-    public void setDescricao(String value) { this.descricao = value; }
-
-    public OffsetDateTime getCriadoEm() { return criadoEm; }
-
-    public OffsetDateTime getAtualizadoEm() { return atualizadoEm; }
+    private void aoAtualizar() {
+        atualizadoEm = OffsetDateTime.now(ZoneOffset.UTC);
+    }
 }

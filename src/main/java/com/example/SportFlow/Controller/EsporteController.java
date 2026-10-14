@@ -1,7 +1,10 @@
 package com.example.SportFlow.Controller;
 
-import com.example.SportFlow.Entity.Esporte;
 import com.example.SportFlow.Service.EsporteService;
+import com.example.SportFlow.dto.request.EsporteRequest;
+import com.example.SportFlow.dto.response.EsporteResponse;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -11,39 +14,30 @@ import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/esportes")
+@RequiredArgsConstructor
 public class EsporteController {
 
     private final EsporteService service;
 
-    public EsporteController(EsporteService service) {
-        this.service = service;
-    }
-
     @GetMapping
-    public List<Esporte> listar() {
+    public List<EsporteResponse> listar() {
         return service.listar();
     }
 
     @GetMapping("/{id}")
-    public Esporte buscar(@PathVariable UUID id) {
+    public EsporteResponse buscar(@PathVariable UUID id) {
         return service.buscar(id);
     }
 
     @PostMapping
-    public ResponseEntity<Esporte> criar(@RequestBody Esporte esporte) {
-        Esporte criado = service.criar(esporte);
-
-        return ResponseEntity
-                .created(URI.create("/api/esportes/" + criado.getId()))
-                .body(criado);
+    public ResponseEntity<EsporteResponse> criar(@Valid @RequestBody EsporteRequest request) {
+        EsporteResponse criado = service.criar(request);
+        return ResponseEntity.created(URI.create("/api/esportes/" + criado.id())).body(criado);
     }
 
     @PutMapping("/{id}")
-    public Esporte atualizar(
-            @PathVariable UUID id,
-            @RequestBody Esporte esporte
-    ) {
-        return service.atualizar(id, esporte);
+    public EsporteResponse atualizar(@PathVariable UUID id, @Valid @RequestBody EsporteRequest request) {
+        return service.atualizar(id, request);
     }
 
     @DeleteMapping("/{id}")

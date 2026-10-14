@@ -1,25 +1,28 @@
 package com.example.SportFlow.Entity;
 
-import com.fasterxml.jackson.annotation.JsonProperty;
+import com.example.SportFlow.Enum.PerfilUsuario;
 import jakarta.persistence.*;
-import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.userdetails.UserDetails;
 
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.Collection;
+import java.util.List;
 import java.util.UUID;
 
 @Entity
 @Table(name = "usuario")
 @Getter
-@NoArgsConstructor(access = AccessLevel.PROTECTED)
-public class Usuario {
+@NoArgsConstructor
+public class Usuario implements UserDetails {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
-    @JsonProperty(access = JsonProperty.Access.READ_ONLY)
     private UUID id;
 
     @Setter
@@ -32,7 +35,6 @@ public class Usuario {
 
     @Setter
     @Column(nullable = false, length = 255)
-    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
     private String senha;
 
     @Setter
@@ -40,23 +42,19 @@ public class Usuario {
     private String telefone;
 
     @Setter
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private PerfilUsuario perfil = PerfilUsuario.CLIENTE;
+
+    @Setter
     @Column(nullable = false)
     private boolean ativo = true;
 
     @Column(name = "criado_em", nullable = false, updatable = false)
-    @JsonProperty(access = JsonProperty.Access.READ_ONLY)
     private OffsetDateTime criadoEm;
 
     @Column(name = "atualizado_em", nullable = false)
-    @JsonProperty(access = JsonProperty.Access.READ_ONLY)
     private OffsetDateTime atualizadoEm;
-
-    public Usuario(String nome, String email, String senha, String telefone) {
-        this.nome = nome;
-        this.email = email;
-        this.senha = senha;
-        this.telefone = telefone;
-    }
 
     @PrePersist
     private void aoCriar() {
@@ -67,5 +65,25 @@ public class Usuario {
     @PreUpdate
     private void aoAtualizar() {
         atualizadoEm = OffsetDateTime.now(ZoneOffset.UTC);
+    }
+
+    @Override
+    public Collection<? extends GrantedAuthority> getAuthorities() {
+        return List.of(new SimpleGrantedAuthority("ROLE_" + perfil.name()));
+    }
+
+    @Override
+    public String getPassword() {
+        return senha;
+    }
+
+    @Override
+    public String getUsername() {
+        return email;
+    }
+
+    @Override
+    public boolean isEnabled() {
+        return ativo;
     }
 }

@@ -1,7 +1,10 @@
 package com.example.SportFlow.Controller;
 
-import com.example.SportFlow.Entity.Usuario;
 import com.example.SportFlow.Service.UsuarioService;
+import com.example.SportFlow.dto.request.UsuarioCreateRequest;
+import com.example.SportFlow.dto.request.UsuarioUpdateRequest;
+import com.example.SportFlow.dto.response.UsuarioResponse;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -11,36 +14,34 @@ import java.util.List;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/usuarios")
+@RequestMapping("/api/usuarios")
 @RequiredArgsConstructor
 public class UsuarioController {
 
     private final UsuarioService service;
 
     @PostMapping
-    public ResponseEntity<Usuario> criar(@RequestBody Usuario usuario) {
-        Usuario criado = service.criar(usuario);
-        URI localizacao = URI.create("/usuarios/" + criado.getId());
-
-        return ResponseEntity.created(localizacao).body(criado);
+    public ResponseEntity<UsuarioResponse> criar(@Valid @RequestBody UsuarioCreateRequest request) {
+        UsuarioResponse criado = service.criar(request);
+        return ResponseEntity.created(URI.create("/api/usuarios/" + criado.id())).body(criado);
     }
 
     @GetMapping
-    public List<Usuario> listar() {
+    public List<UsuarioResponse> listar() {
         return service.listar();
     }
 
     @GetMapping("/{id}")
-    public Usuario buscar(@PathVariable UUID id) {
+    public UsuarioResponse buscar(@PathVariable UUID id) {
         return service.buscar(id);
     }
 
     @PutMapping("/{id}")
-    public Usuario atualizar(
+    public UsuarioResponse atualizar(
             @PathVariable UUID id,
-            @RequestBody Usuario dados
+            @Valid @RequestBody UsuarioUpdateRequest request
     ) {
-        return service.atualizar(id, dados);
+        return service.atualizar(id, request);
     }
 
     @DeleteMapping("/{id}")

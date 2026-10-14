@@ -1,13 +1,18 @@
 package com.example.SportFlow.Service;
 
 import com.example.SportFlow.Entity.Usuario;
+import com.example.SportFlow.Enum.PerfilUsuario;
 import com.example.SportFlow.Repository.UsuarioRepository;
+import com.example.SportFlow.dto.request.RegisterRequest;
+import com.example.SportFlow.dto.request.UsuarioCreateRequest;
+import com.example.SportFlow.dto.request.UsuarioUpdateRequest;
+import com.example.SportFlow.dto.response.UsuarioResponse;
+import com.example.SportFlow.exception.ConflitoException;
+import com.example.SportFlow.exception.RecursoNaoEncontradoException;
 import lombok.RequiredArgsConstructor;
-import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.http.HttpStatus;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 import java.util.Locale;
@@ -18,123 +23,104 @@ import java.util.UUID;
 public class UsuarioService {
 
     private final UsuarioRepository repository;
+    private final PasswordEncoder passwordEncoder;
 
     @Transactional
-    public Usuario criar(Usuario usuario) {
-        validarDados(usuario);
-        validarSenha(usuario.getSenha());
-
-        String email = normalizarEmail(usuario.getEmail());
-        verificarEmailDisponivel(email);
-
-        usuario.setNome(usuario.getNome().trim());
-        usuario.setEmail(email);
-
-        try {
-            return repository.saveAndFlush(usuario);
-        } catch (DataIntegrityViolationException exception) {
-            throw new ResponseStatusException(
-                    HttpStatus.CONFLICT, "E-mail já cadastrado", exception
-            );
-        }
-    }
-
-    @Transactional(readOnly = true)
-    public List<Usuario> listar() {
-        return repository.findAll();
-    }
-
-    @Transactional(readOnly = true)
-    public Usuario buscar(UUID id) {
-        return repository.findById(id).orElseThrow(() ->
-                new ResponseStatusException(
-                        HttpStatus.NOT_FOUND, "Usuário não encontrado"
-                )
+    public UsuarioResponse criar(UsuarioCreateRequest request) {
+        return criarInterno(
+                request.nome(), request.email(), request.senha(), request.telefone(), PerfilUsuario.CLIENTE
         );
     }
 
     @Transactional
-    public Usuario atualizar(UUID id, Usuario dados) {
-        Usuario usuario = buscar(id);
-        validarDados(dados);
+    public UsuarioResponse registrar(RegisterRequest request) {
+        return criarInterno(
+                request.nome(), request.email(), request.senha(), request.telefone(), PerfilUsuario.CLIENTE
+        );
+    }
 
-        String email = normalizarEmail(dados.getEmail());
+    @Transactional(readOnly = true)
+    public List<UsuarioResponse> listar() {
+        return repository.findAll().stream().map(this::paraResponse).toList();
+    }
 
-        if (!usuario.getEmail().equalsIgnoreCase(email)) {
-            verificarEmailDisponivel(email);
+    @Transactional(readOnly = true)
+    public UsuarioResponse buscar(UUID id) {
+        return paraResponse(buscarEntidade(id));
+    }
+
+    @Transactional
+    public UsuarioResponse atualizar(UUID id, UsuarioUpdateRequest request) {
+        Usuario usuario = buscarEntidade(id);
+        String email = normalizarEmail(request.email());
+        if (repository.existsByEmailIgnoreCaseAndIdNot(email, id)) {
+            throw new ConflitoException("E-mail já cadastrado");
         }
 
-        usuario.setNome(dados.getNome().trim());
+        usuario.setNome(request.nome().trim());
         usuario.setEmail(email);
-        usuario.setTelefone(dados.getTelefone());
-        usuario.setAtivo(dados.isAtivo());
-
-        // Se a senha não vier no corpo da requisição, mantém a atual.
-        if (dados.getSenha() != null) {
-            validarSenha(dados.getSenha());
-            usuario.setSenha(dados.getSenha());
+        usuario.setTelefone(normalizarOpcional(request.telefone()));
+        if (request.senha() != null && !request.senha().isBlank()) {
+            usuario.setSenha(passwordEncoder.encode(request.senha()));
         }
-
-        try {
-            return repository.saveAndFlush(usuario);
-        } catch (DataIntegrityViolationException exception) {
-            throw new ResponseStatusException(
-                    HttpStatus.CONFLICT, "E-mail já cadastrado", exception
-            );
+        if (request.ativo() != null) {
+            usuario.setAtivo(request.ativo());
         }
+        return paraResponse(repository.saveAndFlush(usuario));
     }
 
     @Transactional
     public void excluir(UUID id) {
-        Usuario usuario = buscar(id);
-
-        try {
-            repository.delete(usuario);
-            repository.flush();
-        } catch (DataIntegrityViolationException exception) {
-            throw new ResponseStatusException(
-                    HttpStatus.CONFLICT,
-                    "Usuário vinculado a outro registro não pode ser excluído",
-                    exception
-            );
-        }
+        repository.delete(buscarEntidade(id));
+        repository.flush();
     }
 
-    private void validarDados(Usuario usuario) {
-        if (usuario == null
-                || usuario.getNome() == null
-                || usuario.getNome().isBlank()
-                || usuario.getNome().trim().length() > 150
-                || usuario.getEmail() == null
-                || usuario.getEmail().isBlank()
-                || usuario.getEmail().trim().length() > 254
-                || !usuario.getEmail().contains("@")
-                || (usuario.getTelefone() != null
-                && usuario.getTelefone().length() > 30)) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST, "Dados do usuário inválidos"
-            );
-        }
+    @Transactional(readOnly = true)
+    public Usuario buscarEntidade(UUID id) {
+        return repository.findById(id)
+                .orElseThrow(() -> new RecursoNaoEncontradoException("Usuário não encontrado: " + id));
     }
 
-    private void validarSenha(String senha) {
-        if (senha == null || senha.length() < 8) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "A senha deve ter pelo menos 8 caracteres"
-            );
-        }
-    }
-
-    private void verificarEmailDisponivel(String email) {
+    private UsuarioResponse criarInterno(
+            String nome,
+            String emailInformado,
+            String senha,
+            String telefone,
+            PerfilUsuario perfil
+    ) {
+        String email = normalizarEmail(emailInformado);
         if (repository.existsByEmailIgnoreCase(email)) {
-            throw new ResponseStatusException(
-                    HttpStatus.CONFLICT, "E-mail já cadastrado"
-            );
+            throw new ConflitoException("E-mail já cadastrado");
         }
+
+        Usuario usuario = new Usuario();
+        usuario.setNome(nome.trim());
+        usuario.setEmail(email);
+        usuario.setSenha(passwordEncoder.encode(senha));
+        usuario.setTelefone(normalizarOpcional(telefone));
+        usuario.setPerfil(perfil);
+        usuario.setAtivo(true);
+        return paraResponse(repository.saveAndFlush(usuario));
+    }
+
+    public UsuarioResponse paraResponse(Usuario usuario) {
+        return new UsuarioResponse(
+                usuario.getId(),
+                usuario.getNome(),
+                usuario.getEmail(),
+                usuario.getTelefone(),
+                usuario.getPerfil(),
+                usuario.isAtivo(),
+                usuario.getCriadoEm(),
+                usuario.getAtualizadoEm()
+        );
     }
 
     private String normalizarEmail(String email) {
         return email.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private String normalizarOpcional(String valor) {
+        return valor == null || valor.isBlank() ? null : valor.trim();
     }
 }

@@ -1,21 +1,33 @@
 package com.example.SportFlow.Entity;
 
 import jakarta.persistence.*;
-import java.util.UUID;
-import java.time.OffsetDateTime;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+
 import java.time.LocalTime;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.util.UUID;
 
 @Entity
 @Table(name = "horario")
+@Getter
+@Setter
+@NoArgsConstructor
 public class Horario {
+
     @Id
+    @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
-    @Column(name = "quadra_id", nullable = false)
-    private UUID quadraId;
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "quadra_id", nullable = false)
+    private Quadra quadra;
 
-    @Column(name = "esporte_id", nullable = false)
-    private UUID esporteId;
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "esporte_id", nullable = false)
+    private Esporte esporte;
 
     @Column(name = "dia_semana", nullable = false)
     private Short diaSemana;
@@ -27,51 +39,22 @@ public class Horario {
     private LocalTime horaFim;
 
     @Column(nullable = false)
-    private Boolean ativo;
+    private boolean ativo = true;
 
     @Column(name = "criado_em", nullable = false, updatable = false)
     private OffsetDateTime criadoEm;
+
     @Column(name = "atualizado_em", nullable = false)
     private OffsetDateTime atualizadoEm;
 
     @PrePersist
-    void onCreate() {
-        if (id == null) {
-            id = UUID.randomUUID();
-        }
-
-        if (ativo == null) {
-            ativo = true;
-        }
-
-        criadoEm = OffsetDateTime.now();
+    private void aoCriar() {
+        criadoEm = OffsetDateTime.now(ZoneOffset.UTC);
         atualizadoEm = criadoEm;
     }
 
     @PreUpdate
-    void onUpdate() { atualizadoEm = OffsetDateTime.now(); }
-
-    public UUID getId() { return id; }
-
-    public UUID getQuadraId() { return quadraId; }
-    public void setQuadraId(UUID value) { this.quadraId = value; }
-
-    public UUID getEsporteId() { return esporteId; }
-    public void setEsporteId(UUID value) { this.esporteId = value; }
-
-    public Short getDiaSemana() { return diaSemana; }
-    public void setDiaSemana(Short value) { this.diaSemana = value; }
-
-    public LocalTime getHoraInicio() { return horaInicio; }
-    public void setHoraInicio(LocalTime value) { this.horaInicio = value; }
-
-    public LocalTime getHoraFim() { return horaFim; }
-    public void setHoraFim(LocalTime value) { this.horaFim = value; }
-
-    public Boolean getAtivo() { return ativo; }
-    public void setAtivo(Boolean value) { this.ativo = value; }
-
-    public OffsetDateTime getCriadoEm() { return criadoEm; }
-
-    public OffsetDateTime getAtualizadoEm() { return atualizadoEm; }
+    private void aoAtualizar() {
+        atualizadoEm = OffsetDateTime.now(ZoneOffset.UTC);
+    }
 }

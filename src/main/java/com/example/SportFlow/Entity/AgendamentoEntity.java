@@ -1,37 +1,35 @@
 package com.example.SportFlow.Entity;
 
 import jakarta.persistence.*;
-import lombok.*;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.UUID;
 
 @Entity
 @Table(name = "agendamento")
 @Getter
 @Setter
-@ToString
-@EqualsAndHashCode(onlyExplicitlyIncluded = true)
 @NoArgsConstructor
-@AllArgsConstructor
-@Builder
 public class AgendamentoEntity {
 
     @Id
-    @GeneratedValue
-    @EqualsAndHashCode.Include
+    @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
-//    @ManyToOne(fetch = FetchType.LAZY)REVER                          Descomentar quando criar a entidade UsuarioEntity
-//    @JoinColumn(name = "usuario_id", nullable = false)
-    //private UsuarioEntity usuario;
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "usuario_id", nullable = false)
+    private Usuario usuario;
 
-//    @ManyToOne(fetch = FetchType.LAZY)REVER                          Descomentar quando criar a entidade HorarioEntity
-//    @JoinColumn(name = "horario_id", nullable = false)
-//    private HorarioEntity horario;
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "horario_id", nullable = false)
+    private Horario horario;
 
     @Column(name = "data_agendamento", nullable = false)
     private LocalDate dataAgendamento;
@@ -46,17 +44,25 @@ public class AgendamentoEntity {
     private BigDecimal valorTotal;
 
     @Column(nullable = false, length = 30)
-    @Builder.Default
     private String status = "PENDENTE";
 
     @Column(columnDefinition = "TEXT")
     private String observacao;
 
-    @Column(name = "criado_em", nullable = false)
-    @Builder.Default
-    private OffsetDateTime criadoEm = OffsetDateTime.now();
+    @Column(name = "criado_em", nullable = false, updatable = false)
+    private OffsetDateTime criadoEm;
 
     @Column(name = "atualizado_em", nullable = false)
-    @Builder.Default
-    private OffsetDateTime atualizadoEm = OffsetDateTime.now();
+    private OffsetDateTime atualizadoEm;
+
+    @PrePersist
+    private void aoCriar() {
+        criadoEm = OffsetDateTime.now(ZoneOffset.UTC);
+        atualizadoEm = criadoEm;
+    }
+
+    @PreUpdate
+    private void aoAtualizar() {
+        atualizadoEm = OffsetDateTime.now(ZoneOffset.UTC);
+    }
 }

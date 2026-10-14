@@ -2,134 +2,89 @@ package com.example.SportFlow.Service;
 
 import com.example.SportFlow.Entity.Quadra;
 import com.example.SportFlow.Repository.QuadraRepository;
-import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.http.HttpStatus;
+import com.example.SportFlow.dto.request.QuadraRequest;
+import com.example.SportFlow.dto.response.QuadraResponse;
+import com.example.SportFlow.exception.RecursoNaoEncontradoException;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 import java.util.UUID;
 
 @Service
+@RequiredArgsConstructor
 public class QuadraService {
 
     private final QuadraRepository repository;
+    private final EstabelecimentoService estabelecimentoService;
 
-    public QuadraService(QuadraRepository repository) {
-        this.repository = repository;
+    @Transactional(readOnly = true)
+    public List<QuadraResponse> listar() {
+        return repository.findAll().stream().map(this::paraResponse).toList();
     }
 
     @Transactional(readOnly = true)
-    public List<Quadra> listar() {
-        return repository.findAll();
-    }
-
-    @Transactional(readOnly = true)
-    public Quadra buscar(UUID id) {
-        return encontrar(id);
+    public QuadraResponse buscar(UUID id) {
+        return paraResponse(buscarEntidade(id));
     }
 
     @Transactional
-    public Quadra criar(Quadra dados) {
-        validar(dados);
-
+    public QuadraResponse criar(QuadraRequest request) {
         Quadra quadra = new Quadra();
-        preencher(quadra, dados);
-
-        try {
-            return repository.saveAndFlush(quadra);
-        } catch (DataIntegrityViolationException exception) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "Estabelecimento inexistente ou dados inválidos",
-                    exception
-            );
-        }
+        preencher(quadra, request);
+        return paraResponse(repository.saveAndFlush(quadra));
     }
 
     @Transactional
-    public Quadra atualizar(UUID id, Quadra dados) {
-        validar(dados);
-
-        Quadra quadra = encontrar(id);
-        preencher(quadra, dados);
-
-        try {
-            return repository.saveAndFlush(quadra);
-        } catch (DataIntegrityViolationException exception) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "Estabelecimento inexistente ou dados inválidos",
-                    exception
-            );
-        }
+    public QuadraResponse atualizar(UUID id, QuadraRequest request) {
+        Quadra quadra = buscarEntidade(id);
+        preencher(quadra, request);
+        return paraResponse(repository.saveAndFlush(quadra));
     }
 
     @Transactional
     public void excluir(UUID id) {
-        Quadra quadra = encontrar(id);
-
-        try {
-            repository.delete(quadra);
-            repository.flush();
-        } catch (DataIntegrityViolationException exception) {
-            throw new ResponseStatusException(
-                    HttpStatus.CONFLICT,
-                    "A quadra não pode ser excluída porque possui registros relacionados",
-                    exception
-            );
-        }
+        repository.delete(buscarEntidade(id));
+        repository.flush();
     }
 
-    private Quadra encontrar(UUID id) {
+    @Transactional(readOnly = true)
+    public Quadra buscarEntidade(UUID id) {
         return repository.findById(id)
-                .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.NOT_FOUND,
-                        "Quadra inexistente: " + id
-                ));
+                .orElseThrow(() -> new RecursoNaoEncontradoException("Quadra não encontrada: " + id));
     }
 
-    private void validar(Quadra quadra) {
-        if (quadra == null) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "Os dados da quadra são obrigatórios"
-            );
+    private void preencher(Quadra destino, QuadraRequest origem) {
+        destino.setEstabelecimento(estabelecimentoService.buscarEntidade(origem.estabelecimentoId()));
+        destino.setNome(origem.nome().trim());
+        destino.setDescricao(normalizarOpcional(origem.descricao()));
+        destino.setTipoPiso(normalizarOpcional(origem.tipoPiso()));
+        destino.setValorHora(origem.valorHora());
+        if (origem.coberta() != null) {
+            destino.setCoberta(origem.coberta());
         }
-
-        if (quadra.getEstabelecimentoId() == null) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "O estabelecimento é obrigatório"
-            );
-        }
-
-        if (quadra.getNome() == null || quadra.getNome().isBlank()) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "O nome da quadra é obrigatório"
-            );
-        }
-
-        if (quadra.getValorHora() == null ||
-                quadra.getValorHora().signum() < 0) {
-
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "O valor por hora deve ser maior ou igual a zero"
-            );
+        if (origem.ativo() != null) {
+            destino.setAtivo(origem.ativo());
         }
     }
 
-    private void preencher(Quadra destino, Quadra origem) {
-        destino.setEstabelecimentoId(origem.getEstabelecimentoId());
-        destino.setNome(origem.getNome().trim());
-        destino.setDescricao(origem.getDescricao());
-        destino.setValorHora(origem.getValorHora());
+    private QuadraResponse paraResponse(Quadra quadra) {
+        return new QuadraResponse(
+                quadra.getId(),
+                quadra.getEstabelecimento().getId(),
+                quadra.getNome(),
+                quadra.getDescricao(),
+                quadra.getTipoPiso(),
+                quadra.isCoberta(),
+                quadra.getValorHora(),
+                quadra.isAtivo(),
+                quadra.getCriadoEm(),
+                quadra.getAtualizadoEm()
+        );
+    }
 
-        if (origem.getAtivo() != null) {
-            destino.setAtivo(origem.getAtivo());
-        }
+    private String normalizarOpcional(String valor) {
+        return valor == null || valor.isBlank() ? null : valor.trim();
     }
 }

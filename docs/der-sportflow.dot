@@ -1,0 +1,109 @@
+digraph SportFlowDER {
+  graph [rankdir=TB, bgcolor="#f5f7fb", pad=0.35, nodesep=0.45, ranksep=0.85, splines=ortho, fontname="Arial", label="DER - sistema de agendamento de quadras SportFlow", labelloc=t, fontsize=24, fontcolor="#1f2937"];
+  node [shape=plain, fontname="Arial"];
+  edge [color="#315a94", penwidth=1.7, arrowsize=0.7, fontname="Arial", fontsize=10];
+
+  usuario [label=<
+    <TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="6" COLOR="#aec3df" BGCOLOR="white">
+      <TR><TD BGCOLOR="#294f86"><FONT COLOR="white"><B>usuario</B></FONT></TD></TR>
+      <TR><TD ALIGN="LEFT"><B>PK</B> id : uuid</TD></TR><TR><TD ALIGN="LEFT">nome : varchar(150)</TD></TR>
+      <TR><TD ALIGN="LEFT"><B>UQ</B> email : varchar(254)</TD></TR><TR><TD ALIGN="LEFT">senha : varchar(255)</TD></TR>
+      <TR><TD ALIGN="LEFT">telefone : varchar(30)</TD></TR><TR><TD ALIGN="LEFT">perfil : varchar(20)</TD></TR>
+      <TR><TD ALIGN="LEFT">ativo : boolean</TD></TR><TR><TD ALIGN="LEFT">criado_em : timestamptz</TD></TR>
+      <TR><TD ALIGN="LEFT">atualizado_em : timestamptz</TD></TR>
+    </TABLE>>];
+
+  estabelecimento [label=<
+    <TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="6" COLOR="#aec3df" BGCOLOR="white">
+      <TR><TD BGCOLOR="#294f86"><FONT COLOR="white"><B>estabelecimento</B></FONT></TD></TR>
+      <TR><TD ALIGN="LEFT"><B>PK</B> id : uuid</TD></TR><TR><TD ALIGN="LEFT"><B>FK</B> gestor_id : uuid</TD></TR>
+      <TR><TD ALIGN="LEFT">nome : varchar(150)</TD></TR><TR><TD ALIGN="LEFT"><B>UQ</B> email : varchar(254)</TD></TR>
+      <TR><TD ALIGN="LEFT">descricao : text</TD></TR><TR><TD ALIGN="LEFT">telefone : varchar(30)</TD></TR>
+      <TR><TD ALIGN="LEFT">logradouro, numero, bairro</TD></TR><TR><TD ALIGN="LEFT">cidade, estado, cep</TD></TR>
+      <TR><TD ALIGN="LEFT">ativo : boolean</TD></TR><TR><TD ALIGN="LEFT">criado_em, atualizado_em : timestamptz</TD></TR>
+    </TABLE>>];
+
+  funcionario [label=<
+    <TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="6" COLOR="#aec3df" BGCOLOR="white">
+      <TR><TD BGCOLOR="#294f86"><FONT COLOR="white"><B>funcionario</B></FONT></TD></TR>
+      <TR><TD ALIGN="LEFT"><B>PK</B> id : uuid</TD></TR><TR><TD ALIGN="LEFT"><B>FK UQ</B> usuario_id : uuid</TD></TR>
+      <TR><TD ALIGN="LEFT"><B>FK</B> estabelecimento_id : uuid</TD></TR><TR><TD ALIGN="LEFT">cargo : varchar(100)</TD></TR>
+      <TR><TD ALIGN="LEFT">data_admissao : date</TD></TR><TR><TD ALIGN="LEFT">ativo : boolean</TD></TR>
+      <TR><TD ALIGN="LEFT">criado_em, atualizado_em : timestamptz</TD></TR>
+    </TABLE>>];
+
+  quadra [label=<
+    <TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="6" COLOR="#aec3df" BGCOLOR="white">
+      <TR><TD BGCOLOR="#294f86"><FONT COLOR="white"><B>quadra</B></FONT></TD></TR>
+      <TR><TD ALIGN="LEFT"><B>PK</B> id : uuid</TD></TR><TR><TD ALIGN="LEFT"><B>FK</B> estabelecimento_id : uuid</TD></TR>
+      <TR><TD ALIGN="LEFT">nome : varchar(120)</TD></TR><TR><TD ALIGN="LEFT">descricao : text</TD></TR>
+      <TR><TD ALIGN="LEFT">tipo_piso : varchar(60)</TD></TR><TR><TD ALIGN="LEFT">coberta : boolean</TD></TR>
+      <TR><TD ALIGN="LEFT">valor_hora : numeric(10,2)</TD></TR><TR><TD ALIGN="LEFT">ativo : boolean</TD></TR>
+      <TR><TD ALIGN="LEFT">criado_em, atualizado_em : timestamptz</TD></TR>
+    </TABLE>>];
+
+  esporte [label=<
+    <TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="6" COLOR="#aec3df" BGCOLOR="white">
+      <TR><TD BGCOLOR="#294f86"><FONT COLOR="white"><B>esporte</B></FONT></TD></TR>
+      <TR><TD ALIGN="LEFT"><B>PK</B> id : uuid</TD></TR><TR><TD ALIGN="LEFT"><B>UQ</B> nome : varchar(100)</TD></TR>
+      <TR><TD ALIGN="LEFT">descricao : text</TD></TR><TR><TD ALIGN="LEFT">ativo : boolean</TD></TR>
+      <TR><TD ALIGN="LEFT">criado_em, atualizado_em : timestamptz</TD></TR>
+    </TABLE>>];
+
+  horario [label=<
+    <TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="6" COLOR="#aec3df" BGCOLOR="white">
+      <TR><TD BGCOLOR="#294f86"><FONT COLOR="white"><B>horario</B></FONT></TD></TR>
+      <TR><TD ALIGN="LEFT"><B>PK</B> id : uuid</TD></TR><TR><TD ALIGN="LEFT"><B>FK</B> quadra_id : uuid</TD></TR>
+      <TR><TD ALIGN="LEFT"><B>FK</B> esporte_id : uuid</TD></TR><TR><TD ALIGN="LEFT">dia_semana : smallint</TD></TR>
+      <TR><TD ALIGN="LEFT">hora_inicio, hora_fim : time</TD></TR><TR><TD ALIGN="LEFT">ativo : boolean</TD></TR>
+      <TR><TD ALIGN="LEFT">criado_em, atualizado_em : timestamptz</TD></TR>
+    </TABLE>>];
+
+  agendamento [label=<
+    <TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="6" COLOR="#aec3df" BGCOLOR="white">
+      <TR><TD BGCOLOR="#294f86"><FONT COLOR="white"><B>agendamento</B></FONT></TD></TR>
+      <TR><TD ALIGN="LEFT"><B>PK</B> id : uuid</TD></TR><TR><TD ALIGN="LEFT"><B>FK</B> usuario_id : uuid</TD></TR>
+      <TR><TD ALIGN="LEFT"><B>FK</B> horario_id : uuid</TD></TR><TR><TD ALIGN="LEFT">data_agendamento : date</TD></TR>
+      <TR><TD ALIGN="LEFT">hora_inicio, hora_fim : time</TD></TR><TR><TD ALIGN="LEFT">valor_total : numeric(10,2)</TD></TR>
+      <TR><TD ALIGN="LEFT">status : varchar(30)</TD></TR><TR><TD ALIGN="LEFT">observacao : text</TD></TR>
+      <TR><TD ALIGN="LEFT">criado_em, atualizado_em : timestamptz</TD></TR>
+    </TABLE>>];
+
+  pagamento [label=<
+    <TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="6" COLOR="#aec3df" BGCOLOR="white">
+      <TR><TD BGCOLOR="#294f86"><FONT COLOR="white"><B>pagamento</B></FONT></TD></TR>
+      <TR><TD ALIGN="LEFT"><B>PK</B> id : uuid</TD></TR><TR><TD ALIGN="LEFT"><B>FK UQ</B> agendamento_id : uuid</TD></TR>
+      <TR><TD ALIGN="LEFT">valor : numeric(10,2)</TD></TR><TR><TD ALIGN="LEFT">forma : varchar(30)</TD></TR>
+      <TR><TD ALIGN="LEFT">status : varchar(30)</TD></TR><TR><TD ALIGN="LEFT">pago_em, criado_em : timestamptz</TD></TR>
+    </TABLE>>];
+
+  avaliacao [label=<
+    <TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="6" COLOR="#aec3df" BGCOLOR="white">
+      <TR><TD BGCOLOR="#294f86"><FONT COLOR="white"><B>avaliacao</B></FONT></TD></TR>
+      <TR><TD ALIGN="LEFT"><B>PK</B> id : uuid</TD></TR><TR><TD ALIGN="LEFT"><B>FK UQ</B> agendamento_id : uuid</TD></TR>
+      <TR><TD ALIGN="LEFT">nota : smallint</TD></TR><TR><TD ALIGN="LEFT">comentario : text</TD></TR>
+      <TR><TD ALIGN="LEFT">criado_em, atualizado_em : timestamptz</TD></TR>
+    </TABLE>>];
+
+  legenda [shape=plain, label=<
+    <TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="5">
+      <TR><TD><B>Legenda</B></TD><TD>PK = chave primária</TD><TD>FK = chave estrangeira</TD><TD>UQ = valor único</TD></TR>
+      <TR><TD COLSPAN="4">Quadra e esporte formam uma relação N:N por meio da entidade associativa horario.</TD></TR>
+    </TABLE>>];
+
+  {rank=same; usuario; estabelecimento; esporte;}
+  {rank=same; funcionario; quadra; horario;}
+  {rank=same; agendamento; pagamento; avaliacao;}
+
+  usuario -> estabelecimento [label="1       N", xlabel="gerencia"];
+  usuario -> funcionario [label="1       0..1"];
+  estabelecimento -> funcionario [label="1       N"];
+  estabelecimento -> quadra [label="1       N"];
+  quadra -> horario [label="1       N"];
+  esporte -> horario [label="1       N"];
+  usuario -> agendamento [label="1       N"];
+  horario -> agendamento [label="1       N"];
+  agendamento -> pagamento [label="1       0..1"];
+  agendamento -> avaliacao [label="1       0..1"];
+  {rank=max; legenda;}
+}

@@ -2,34 +2,28 @@ package com.example.SportFlow.Entity;
 
 import com.example.SportFlow.Enum.PagamentoStatus;
 import jakarta.persistence.*;
-import lombok.*;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.UUID;
 
 @Entity
 @Table(name = "pagamento")
 @Getter
 @Setter
-@ToString
-@EqualsAndHashCode(onlyExplicitlyIncluded = true)
 @NoArgsConstructor
-@AllArgsConstructor
-@Builder
 public class PagamentoEntity {
 
     @Id
-    @GeneratedValue
-    @EqualsAndHashCode.Include
+    @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
-    @OneToOne(fetch = FetchType.LAZY)
-    @JoinColumn(
-            name = "agendamento_id",
-            nullable = false,
-            unique = true
-    )
+    @OneToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "agendamento_id", nullable = false, unique = true)
     private AgendamentoEntity agendamento;
 
     @Column(nullable = false, precision = 10, scale = 2)
@@ -40,13 +34,16 @@ public class PagamentoEntity {
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 30)
-    private PagamentoStatus status;
+    private PagamentoStatus status = PagamentoStatus.PENDENTE;
 
-    @Column(name = "criado_em", nullable = false)
-    @Builder.Default
-    private OffsetDateTime criadoEm = OffsetDateTime.now();
+    @Column(name = "criado_em", nullable = false, updatable = false)
+    private OffsetDateTime criadoEm;
 
     @Column(name = "pago_em")
     private OffsetDateTime pagoEm;
-}
 
+    @PrePersist
+    private void aoCriar() {
+        criadoEm = OffsetDateTime.now(ZoneOffset.UTC);
+    }
+}

@@ -2,82 +2,84 @@ package com.example.SportFlow.Service;
 
 import com.example.SportFlow.Entity.Esporte;
 import com.example.SportFlow.Repository.EsporteRepository;
-import org.springframework.http.HttpStatus;
+import com.example.SportFlow.dto.request.EsporteRequest;
+import com.example.SportFlow.dto.response.EsporteResponse;
+import com.example.SportFlow.exception.ConflitoException;
+import com.example.SportFlow.exception.RecursoNaoEncontradoException;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 import java.util.UUID;
 
 @Service
+@RequiredArgsConstructor
 public class EsporteService {
 
     private final EsporteRepository repository;
 
-    public EsporteService(EsporteRepository repository) {
-        this.repository = repository;
+    @Transactional(readOnly = true)
+    public List<EsporteResponse> listar() {
+        return repository.findAll().stream().map(this::paraResponse).toList();
     }
 
     @Transactional(readOnly = true)
-    public List<Esporte> listar() {
-        return repository.findAll();
-    }
-
-    @Transactional(readOnly = true)
-    public Esporte buscar(UUID id) {
-        return encontrar(id);
+    public EsporteResponse buscar(UUID id) {
+        return paraResponse(buscarEntidade(id));
     }
 
     @Transactional
-    public Esporte criar(Esporte dados) {
-        validar(dados);
-
+    public EsporteResponse criar(EsporteRequest request) {
+        String nome = request.nome().trim();
+        if (repository.existsByNomeIgnoreCase(nome)) {
+            throw new ConflitoException("Esporte já cadastrado");
+        }
         Esporte esporte = new Esporte();
-        preencher(esporte, dados);
-
-        return repository.saveAndFlush(esporte);
+        preencher(esporte, request, nome);
+        return paraResponse(repository.saveAndFlush(esporte));
     }
 
     @Transactional
-    public Esporte atualizar(UUID id, Esporte dados) {
-        validar(dados);
-
-        Esporte esporte = encontrar(id);
-        preencher(esporte, dados);
-
-        return repository.saveAndFlush(esporte);
+    public EsporteResponse atualizar(UUID id, EsporteRequest request) {
+        Esporte esporte = buscarEntidade(id);
+        String nome = request.nome().trim();
+        if (repository.existsByNomeIgnoreCaseAndIdNot(nome, id)) {
+            throw new ConflitoException("Esporte já cadastrado");
+        }
+        preencher(esporte, request, nome);
+        return paraResponse(repository.saveAndFlush(esporte));
     }
 
     @Transactional
     public void excluir(UUID id) {
-        Esporte esporte = encontrar(id);
-        repository.delete(esporte);
+        repository.delete(buscarEntidade(id));
         repository.flush();
     }
 
-    private Esporte encontrar(UUID id) {
+    @Transactional(readOnly = true)
+    public Esporte buscarEntidade(UUID id) {
         return repository.findById(id)
-                .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.NOT_FOUND,
-                        "Esporte inexistente: " + id
-                ));
+                .orElseThrow(() -> new RecursoNaoEncontradoException("Esporte não encontrado: " + id));
     }
 
-    private void validar(Esporte esporte) {
-        if (esporte == null ||
-                esporte.getNome() == null ||
-                esporte.getNome().isBlank()) {
-
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "O nome do esporte é obrigatório"
-            );
+    private void preencher(Esporte destino, EsporteRequest origem, String nome) {
+        destino.setNome(nome);
+        destino.setDescricao(origem.descricao() == null || origem.descricao().isBlank()
+                ? null : origem.descricao().trim());
+        if (origem.ativo() != null) {
+            destino.setAtivo(origem.ativo());
         }
     }
 
-    private void preencher(Esporte destino, Esporte origem) {
-        destino.setNome(origem.getNome().trim());
-        destino.setDescricao(origem.getDescricao());
+    private EsporteResponse paraResponse(Esporte esporte) {
+        return new EsporteResponse(
+                esporte.getId(),
+                esporte.getNome(),
+                esporte.getDescricao(),
+                esporte.isAtivo(),
+                esporte.getCriadoEm(),
+                esporte.getAtualizadoEm()
+        );
     }
 }

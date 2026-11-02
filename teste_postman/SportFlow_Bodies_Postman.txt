@@ -1,0 +1,112 @@
+SPORTFLOW — BODIES PARA TESTAR NO POSTMAN
+========================================
+
+Base URL: http://localhost:8080
+Body: raw -> JSON
+Para rotas protegidas: Authorization -> Bearer Token
+
+ATENÇÃO: As rotas (exceto /auth/register e /auth/login) e os formatos dos relacionamentos são exemplos e dependem dos Controllers/DTOs implementados. Substitua todos os UUIDs ilustrativos pelos IDs retornados após cada cadastro. Não reutilize a senha de exemplo em produção.
+
+1. USUÁRIO
+POST http://localhost:8080/auth/register
+{
+  "name": "Henrique Teste",
+  "email": "henrique.teste@sportflow.com",
+  "password": "123456"
+}
+
+LOGIN — OBTER JWT
+POST http://localhost:8080/auth/login
+{
+  "email": "henrique.teste@sportflow.com",
+  "password": "123456"
+}
+
+2. ESPORTE
+POST http://localhost:8080/api/esportes
+{
+  "nome": "Futebol",
+  "descricao": "Futebol society"
+}
+
+3. ESTABELECIMENTO
+POST http://localhost:8080/api/estabelecimentos
+{
+  "nome": "Arena SportFlow",
+  "email": "arena@sportflow.com",
+  "descricao": "Estabelecimento esportivo para testes",
+  "telefone": "48988887777",
+  "logradouro": "Rua das Quadras",
+  "numero": "100",
+  "bairro": "Centro",
+  "cidade": "Criciúma",
+  "estado": "SC",
+  "cep": "88801000",
+  "ativo": true
+}
+
+4. FUNCIONÁRIO
+POST http://localhost:8080/api/funcionarios
+{
+  "usuario": { "id": "550e8400-e29b-41d4-a716-446655440001" },
+  "estabelecimento": { "id": "550e8400-e29b-41d4-a716-446655440002" },
+  "cargo": "ADMINISTRADOR",
+  "dataAdmissao": "2026-11-02",
+  "ativo": true
+}
+
+5. QUADRA
+POST http://localhost:8080/api/quadras
+{
+  "estabelecimento": { "id": "550e8400-e29b-41d4-a716-446655440002" },
+  "nome": "Quadra Society 1",
+  "descricao": "Quadra de futebol society",
+  "valorHora": 120.00,
+  "ativo": true
+}
+
+6. HORÁRIO
+POST http://localhost:8080/api/horarios
+{
+  "quadra": { "id": "550e8400-e29b-41d4-a716-446655440003" },
+  "esporte": { "id": "550e8400-e29b-41d4-a716-446655440004" },
+  "diaSemana": 1,
+  "horaInicio": "08:00:00",
+  "horaFim": "09:00:00",
+  "ativo": true
+}
+
+7. AGENDAMENTO
+POST http://localhost:8080/api/agendamentos
+{
+  "usuario": { "id": "550e8400-e29b-41d4-a716-446655440001" },
+  "horario": { "id": "550e8400-e29b-41d4-a716-446655440005" },
+  "dataAgendamento": "2026-11-09",
+  "horaInicio": "08:00:00",
+  "horaFim": "09:00:00",
+  "valorTotal": 120.00,
+  "status": "PENDENTE",
+  "observacao": "Agendamento criado para teste"
+}
+
+8. PAGAMENTO
+POST http://localhost:8080/api/pagamentos
+{
+  "agendamento": { "id": "550e8400-e29b-41d4-a716-446655440006" },
+  "valor": 120.00,
+  "forma": "PIX"
+}
+
+9. AVALIAÇÃO
+POST http://localhost:8080/api/avaliacoes
+{
+  "agendamento": { "id": "550e8400-e29b-41d4-a716-446655440006" },
+  "nota": 5,
+  "comentario": "Excelente experiência!"
+}
+
+OBSERVAÇÕES
+- Execute os POSTs na ordem indicada por causa das chaves estrangeiras.
+- O status de pagamento é definido como PENDENTE pelo PagamentoService.
+- A tabela flyway_schema_history é gerenciada pelo Flyway e não requer POST.
+- Se o Controller usar DTOs com campos como usuarioId ou quadraId, adapte o JSON ao DTO.

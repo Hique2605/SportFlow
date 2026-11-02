@@ -1,5 +1,6 @@
 package com.example.SportFlow.Entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -22,6 +23,7 @@ public class Avaliacao {
     @EqualsAndHashCode.Include
     private UUID id;
 
+    @JsonIgnore
     @OneToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "agendamento_id",nullable = false,unique = true)
     private Agendamento agendamento;

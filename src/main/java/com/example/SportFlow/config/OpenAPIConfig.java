@@ -16,26 +16,27 @@ public class OpenAPIConfig {
     @Bean
     public OpenAPI apiInfo() {
         return new OpenAPI()
-                    .info(new Info()
-                            .title("API de Controle de TCC")
-                            .description("REST API utilizada pelos professores...")
-                            .version("v1.0")
-                    )
+                .info(new Info()
+                        .title("SportFlow API")
+                        .description(
+                                "API REST para gerenciamento de usuários, " +
+                                        "estabelecimentos esportivos, quadras, horários, " +
+                                        "agendamentos, pagamentos e avaliações."
+                        )
+                        .version("1.0.0")
+                )
                 .addSecurityItem(
                         new SecurityRequirement()
                                 .addList(SECURITY_SCHEME_NAME)
-
                 )
                 .components(new Components()
                         .addSecuritySchemes(
                                 SECURITY_SCHEME_NAME,
                                 new SecurityScheme()
-                                        .name(SECURITY_SCHEME_NAME)
                                         .type(SecurityScheme.Type.HTTP)
                                         .scheme("bearer")
                                         .bearerFormat("JWT")
                         )
                 );
     }
-
 }

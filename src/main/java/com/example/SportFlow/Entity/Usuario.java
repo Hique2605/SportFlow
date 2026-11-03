@@ -1,7 +1,7 @@
 package com.example.SportFlow.Entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import org.jspecify.annotations.Nullable;
 import org.springframework.security.core.GrantedAuthority;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
@@ -70,22 +70,30 @@ public class Usuario implements UserDetails {
         atualizadoEm = criadoEm;
     }
 
+    @PreUpdate
+    private void aoAtualizar() {
+        atualizadoEm = OffsetDateTime.now(ZoneOffset.UTC);
+    }
+
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
         return List.of();
     }
 
     @Override
+    @JsonIgnore
     public String getPassword() {
         return this.senha;
     }
 
     @Override
+    @JsonIgnore
     public String getUsername() {
         return this.email;
     }
 
     @Override
+    @JsonIgnore
     public boolean isEnabled() {
         return this.ativo;
     }

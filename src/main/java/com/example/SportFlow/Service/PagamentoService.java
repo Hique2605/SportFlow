@@ -1,216 +1,169 @@
 package com.example.SportFlow.Service;
 
+import com.example.SportFlow.Dto.Pagamento.PagamentoRequest;
 import com.example.SportFlow.Dto.Pagamento.PagamentoResponse;
+import com.example.SportFlow.Dto.Pagamento.PagamentoUpdateRequest;
 import com.example.SportFlow.Entity.Agendamento;
 import com.example.SportFlow.Entity.Pagamento;
 import com.example.SportFlow.Enum.PagamentoStatus;
+import com.example.SportFlow.Enum.StatusAgendamento;
 import com.example.SportFlow.Repository.AgendamentoRepository;
 import com.example.SportFlow.Repository.PagamentoRepository;
-
+import com.example.SportFlow.config.UsuarioLogado;
 import lombok.RequiredArgsConstructor;
-
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
 
+/**
+ * Todos os métodos devolvem DTO montado DENTRO da transação.
+ * Antes a entidade era devolvida ao controller e o Jackson tentava ler o
+ * agendamento (LAZY) depois da transação fechada, gerando erro 500.
+ */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class PagamentoService {
 
     private final PagamentoRepository pagamentoRepository;
     private final AgendamentoRepository agendamentoRepository;
+    private final UsuarioLogado usuarioLogado;
 
     @Transactional
-    public Pagamento criar(Pagamento pagamento) {
+    public PagamentoResponse criar(PagamentoRequest dto) {
+        Agendamento agendamento = agendamentoRepository.findById(dto.agendamentoId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Agendamento não encontrado"));
 
-        if (pagamento.getAgendamento() == null ||
-                pagamento.getAgendamento().getId() == null) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "Agendamento é obrigatório"
-            );
+        usuarioLogado.verificarDonoOuAdmin(agendamento.getUsuario().getId());
+
+        if (agendamento.getStatus() == StatusAgendamento.CANCELADO) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Não é possível pagar um agendamento cancelado");
         }
 
-        if (pagamento.getValor() == null ||
-                pagamento.getValor().compareTo(BigDecimal.ZERO) <= 0 ||
-                pagamento.getValor().scale() > 2 ||
-                pagamento.getValor().precision()
-                        - pagamento.getValor().scale() > 8) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "Valor do pagamento inválido"
-            );
+        if (pagamentoRepository.existsByAgendamentoId(dto.agendamentoId())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Este agendamento já possui um pagamento");
         }
 
-        if (pagamento.getForma() == null ||
-                pagamento.getForma().isBlank() ||
-                pagamento.getForma().length() > 30) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "Forma de pagamento inválida"
-            );
-        }
-
-        UUID agendamentoId = pagamento.getAgendamento().getId();
-
-        Agendamento agendamento = agendamentoRepository
-                .findById(agendamentoId)
-                .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.NOT_FOUND,
-                        "Agendamento não encontrado"
-                ));
-
-        if (pagamentoRepository.existsByAgendamentoId(agendamentoId)) {
-            throw new ResponseStatusException(
-                    HttpStatus.CONFLICT,
-                    "Este agendamento já possui um pagamento"
-            );
-        }
-
-        Pagamento novoPagamento = Pagamento.builder()
+        Pagamento novo = Pagamento.builder()
                 .agendamento(agendamento)
-                .valor(pagamento.getValor())
-                .forma(pagamento.getForma())
+                .valor(dto.valor())
+                .forma(dto.forma().trim())
                 .status(PagamentoStatus.PENDENTE)
                 .criadoEm(OffsetDateTime.now())
                 .build();
 
-        return pagamentoRepository.save(novoPagamento);
+        Pagamento salvo = pagamentoRepository.save(novo);
+        log.info("Pagamento {} criado para o agendamento {} ({} via {})",
+                salvo.getId(), agendamento.getId(), dto.valor(), dto.forma());
+        return PagamentoResponse.from(salvo);
     }
 
+    /** ADMIN vê todos; CLIENTE vê só os dos próprios agendamentos. */
     @Transactional(readOnly = true)
     public List<PagamentoResponse> listarTodos() {
+        boolean admin = usuarioLogado.isAdmin();
+        UUID logado = usuarioLogado.id();
 
-        return pagamentoRepository.findAll()
-                .stream()
-                .map(this::converter)
+        return pagamentoRepository.findAll().stream()
+                .filter(p -> admin || p.getAgendamento().getUsuario().getId().equals(logado))
+                .map(PagamentoResponse::from)
                 .toList();
     }
 
     @Transactional(readOnly = true)
-    public Pagamento buscarPorId(UUID id) {
-        return pagamentoRepository.findById(id)
-                .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.NOT_FOUND,
-                        "Pagamento não encontrado"
-                ));
+    public PagamentoResponse buscarPorId(UUID id) {
+        Pagamento pagamento = encontrar(id);
+        verificarAcesso(pagamento);
+        return PagamentoResponse.from(pagamento);
     }
 
     @Transactional(readOnly = true)
-    public Pagamento buscarPorAgendamento(UUID agendamentoId) {
-        return pagamentoRepository.findByAgendamentoId(agendamentoId)
-                .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.NOT_FOUND,
-                        "Pagamento não encontrado para este agendamento"
-                ));
+    public PagamentoResponse buscarPorAgendamento(UUID agendamentoId) {
+        Pagamento pagamento = pagamentoRepository.findByAgendamentoId(agendamentoId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                        "Pagamento não encontrado para este agendamento"));
+        verificarAcesso(pagamento);
+        return PagamentoResponse.from(pagamento);
     }
 
+    /** Somente ADMIN (regra no SecurityConfig). */
     @Transactional
-    public Pagamento atualizar(UUID id, Pagamento dados) {
+    public PagamentoResponse atualizar(UUID id, PagamentoUpdateRequest dados) {
+        Pagamento pagamento = encontrar(id);
+        exigirPendente(pagamento, "alterados");
 
-        Pagamento pagamento = buscarPorId(id);
+        pagamento.setValor(dados.valor());
+        pagamento.setForma(dados.forma().trim());
 
-        if (pagamento.getStatus() != PagamentoStatus.PENDENTE) {
-            throw new ResponseStatusException(
-                    HttpStatus.CONFLICT,
-                    "Somente pagamentos pendentes podem ser alterados"
-            );
-        }
-
-        if (dados.getValor() == null ||
-                dados.getValor().compareTo(BigDecimal.ZERO) <= 0 ||
-                dados.getValor().scale() > 2 ||
-                dados.getValor().precision()
-                        - dados.getValor().scale() > 8) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "Valor do pagamento inválido"
-            );
-        }
-
-        if (dados.getForma() == null ||
-                dados.getForma().isBlank() ||
-                dados.getForma().length() > 30) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "Forma de pagamento inválida"
-            );
-        }
-
-        pagamento.setValor(dados.getValor());
-        pagamento.setForma(dados.getForma());
-
-        return pagamentoRepository.save(pagamento);
+        return PagamentoResponse.from(pagamentoRepository.save(pagamento));
     }
 
+    /** Somente ADMIN. Confirma o pagamento e o agendamento junto. */
     @Transactional
-    public Pagamento confirmarPagamento(UUID id) {
-
-        Pagamento pagamento = buscarPorId(id);
-
-        if (pagamento.getStatus() != PagamentoStatus.PENDENTE) {
-            throw new ResponseStatusException(
-                    HttpStatus.CONFLICT,
-                    "Somente pagamentos pendentes podem ser confirmados"
-            );
-        }
+    public PagamentoResponse confirmarPagamento(UUID id) {
+        Pagamento pagamento = encontrar(id);
+        exigirPendente(pagamento, "confirmados");
 
         pagamento.setStatus(PagamentoStatus.PAGO);
         pagamento.setPagoEm(OffsetDateTime.now());
 
-        return pagamentoRepository.save(pagamento);
+        Agendamento agendamento = pagamento.getAgendamento();
+        if (agendamento.getStatus() == StatusAgendamento.PENDENTE) {
+            agendamento.setStatus(StatusAgendamento.CONFIRMADO);
+            agendamento.setAtualizadoEm(OffsetDateTime.now());
+        }
+
+        log.info("Pagamento {} confirmado; agendamento {} -> {}", id, agendamento.getId(), agendamento.getStatus());
+        return PagamentoResponse.from(pagamentoRepository.save(pagamento));
     }
 
+    /** Dono do agendamento ou ADMIN. */
     @Transactional
-    public Pagamento cancelarPagamento(UUID id) {
-
-        Pagamento pagamento = buscarPorId(id);
-
-        if (pagamento.getStatus() != PagamentoStatus.PENDENTE) {
-            throw new ResponseStatusException(
-                    HttpStatus.CONFLICT,
-                    "Somente pagamentos pendentes podem ser cancelados"
-            );
-        }
+    public PagamentoResponse cancelarPagamento(UUID id) {
+        Pagamento pagamento = encontrar(id);
+        verificarAcesso(pagamento);
+        exigirPendente(pagamento, "cancelados");
 
         pagamento.setStatus(PagamentoStatus.CANCELADO);
         pagamento.setPagoEm(null);
 
-        return pagamentoRepository.save(pagamento);
+        return PagamentoResponse.from(pagamentoRepository.save(pagamento));
     }
 
+    /** Somente ADMIN. */
     @Transactional
     public void excluir(UUID id) {
-
-        Pagamento pagamento = buscarPorId(id);
+        Pagamento pagamento = encontrar(id);
 
         if (pagamento.getStatus() == PagamentoStatus.PAGO) {
-            throw new ResponseStatusException(
-                    HttpStatus.CONFLICT,
-                    "Pagamentos confirmados não podem ser excluídos"
-            );
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Pagamentos confirmados não podem ser excluídos");
         }
 
         pagamentoRepository.delete(pagamento);
     }
 
-    private PagamentoResponse converter(Pagamento pagamento) {
+    // ---------- auxiliares ----------
 
-        return new PagamentoResponse(
-                pagamento.getId(),
-                pagamento.getAgendamento().getId(),
-                pagamento.getValor(),
-                pagamento.getForma(),
-                pagamento.getStatus(),
-                pagamento.getCriadoEm(),
-                pagamento.getPagoEm()
-        );
+    private Pagamento encontrar(UUID id) {
+        return pagamentoRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Pagamento não encontrado"));
     }
 
+    private void verificarAcesso(Pagamento pagamento) {
+        usuarioLogado.verificarDonoOuAdmin(pagamento.getAgendamento().getUsuario().getId());
+    }
+
+    private void exigirPendente(Pagamento pagamento, String acao) {
+        if (pagamento.getStatus() != PagamentoStatus.PENDENTE) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Somente pagamentos pendentes podem ser " + acao);
+        }
+    }
 }

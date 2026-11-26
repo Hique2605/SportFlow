@@ -1,6 +1,5 @@
 package com.example.SportFlow.Entity;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -23,9 +22,9 @@ public class Avaliacao {
     @EqualsAndHashCode.Include
     private UUID id;
 
-    @JsonIgnore
     @OneToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "agendamento_id",nullable = false,unique = true)
+    @ToString.Exclude
     private Agendamento agendamento;
 
     @Column(nullable = false)
@@ -34,7 +33,14 @@ public class Avaliacao {
     @Column(columnDefinition = "TEXT")
     private String comentario;
 
-    @Column(name = "criado_em", nullable = false)
+    @Column(name = "criado_em", nullable = false, updatable = false)
     private OffsetDateTime criadoEm;
+
+    @PrePersist
+    void aoCriar() {
+        if (criadoEm == null) {
+            criadoEm = OffsetDateTime.now();
+        }
+    }
 }
 

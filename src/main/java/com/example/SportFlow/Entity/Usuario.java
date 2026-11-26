@@ -1,8 +1,10 @@
 package com.example.SportFlow.Entity;
 
+import com.example.SportFlow.Enum.Perfil;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Getter;
@@ -49,6 +51,11 @@ public class Usuario implements UserDetails {
     @Column(nullable = false)
     private boolean ativo = true;
 
+    @Setter
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private Perfil perfil = Perfil.CLIENTE;
+
     @Column(name = "criado_em", nullable = false, updatable = false)
     @JsonProperty(access = JsonProperty.Access.READ_ONLY)
     private OffsetDateTime criadoEm;
@@ -77,7 +84,8 @@ public class Usuario implements UserDetails {
 
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
-        return List.of();
+        // O Spring Security espera o prefixo ROLE_ para usar hasRole("ADMIN")
+        return List.of(new SimpleGrantedAuthority("ROLE_" + perfil.name()));
     }
 
     @Override

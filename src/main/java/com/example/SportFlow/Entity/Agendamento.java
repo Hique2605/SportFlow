@@ -28,10 +28,12 @@ public class Agendamento {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "usuario_id", nullable = false)
+    @ToString.Exclude
     private Usuario usuario;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "horario_id", nullable = false)
+    @ToString.Exclude
     private Horario horario;
 
     @Column(name = "data_agendamento", nullable = false)

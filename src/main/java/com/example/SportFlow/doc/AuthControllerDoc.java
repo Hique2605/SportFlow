@@ -20,7 +20,7 @@ public interface AuthControllerDoc {
 
     @Operation(
             summary = "Realiza o login do usuário",
-            description = "Autentica o usuário utilizando e-mail e senha e retorna um token JWT."
+            description = "Autentica o usuário utilizando e-mail e senha e retorna um token JWT (validade de 24h). Use o token no botão Authorize."
     )
     @ApiResponses({
             @ApiResponse(
@@ -45,7 +45,7 @@ public interface AuthControllerDoc {
 
     @Operation(
             summary = "Cadastra um novo usuário",
-            description = "Cria um novo usuário no sistema utilizando nome, e-mail e senha."
+            description = "Cria um novo usuário com perfil CLIENTE utilizando nome, e-mail e senha (mínimo 8 caracteres)."
     )
     @ApiResponses({
             @ApiResponse(
@@ -58,7 +58,11 @@ public interface AuthControllerDoc {
             ),
             @ApiResponse(
                     responseCode = "400",
-                    description = "Dados de cadastro inválidos"
+                    description = "Dados de cadastro inválidos (e-mail inválido, senha com menos de 8 caracteres...)"
+            ),
+            @ApiResponse(
+                    responseCode = "409",
+                    description = "E-mail já cadastrado"
             )
     })
     ResponseEntity<RegisterUserResponse> register(RegisterUserRequest request);

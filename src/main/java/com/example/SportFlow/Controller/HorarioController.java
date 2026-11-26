@@ -1,7 +1,10 @@
 package com.example.SportFlow.Controller;
 
-import com.example.SportFlow.Entity.Horario;
+import com.example.SportFlow.Dto.Horario.HorarioRequest;
+import com.example.SportFlow.Dto.Horario.HorarioResponse;
 import com.example.SportFlow.Service.HorarioService;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -9,6 +12,7 @@ import java.net.URI;
 import java.util.List;
 import java.util.UUID;
 
+@Tag(name = "Horários", description = "Leitura: qualquer usuário logado. Escrita: ADMIN.")
 @RestController
 @RequestMapping("/api/horarios")
 public class HorarioController {
@@ -20,30 +24,24 @@ public class HorarioController {
     }
 
     @GetMapping
-    public List<Horario> listar() {
-        return service.listar();
+    public List<HorarioResponse> listar() {
+        return service.listar().stream().map(HorarioResponse::from).toList();
     }
 
     @GetMapping("/{id}")
-    public Horario buscar(@PathVariable UUID id) {
-        return service.buscar(id);
+    public HorarioResponse buscar(@PathVariable UUID id) {
+        return HorarioResponse.from(service.buscar(id));
     }
 
     @PostMapping
-    public ResponseEntity<Horario> criar(@RequestBody Horario horario) {
-        Horario criado = service.criar(horario);
-
-        return ResponseEntity
-                .created(URI.create("/api/horarios/" + criado.getId()))
-                .body(criado);
+    public ResponseEntity<HorarioResponse> criar(@Valid @RequestBody HorarioRequest dto) {
+        HorarioResponse criado = HorarioResponse.from(service.criar(dto.toEntity()));
+        return ResponseEntity.created(URI.create("/api/horarios/" + criado.id())).body(criado);
     }
 
     @PutMapping("/{id}")
-    public Horario atualizar(
-            @PathVariable UUID id,
-            @RequestBody Horario horario
-    ) {
-        return service.atualizar(id, horario);
+    public HorarioResponse atualizar(@PathVariable UUID id, @Valid @RequestBody HorarioRequest dto) {
+        return HorarioResponse.from(service.atualizar(id, dto.toEntity()));
     }
 
     @DeleteMapping("/{id}")

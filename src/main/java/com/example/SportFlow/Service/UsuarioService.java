@@ -4,6 +4,7 @@ import com.example.SportFlow.Entity.Usuario;
 import com.example.SportFlow.Repository.UsuarioRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,6 +19,7 @@ import java.util.UUID;
 public class UsuarioService {
 
     private final UsuarioRepository repository;
+    private final PasswordEncoder passwordEncoder;
 
     @Transactional
     public Usuario criar(Usuario usuario) {
@@ -29,6 +31,8 @@ public class UsuarioService {
 
         usuario.setNome(usuario.getNome().trim());
         usuario.setEmail(email);
+        // Senha sempre criptografada com BCrypt (antes era salva em texto puro)
+        usuario.setSenha(passwordEncoder.encode(usuario.getSenha()));
 
         try {
             return repository.saveAndFlush(usuario);
@@ -69,10 +73,14 @@ public class UsuarioService {
         usuario.setTelefone(dados.getTelefone());
         usuario.setAtivo(dados.isAtivo());
 
+        if (dados.getPerfil() != null) {
+            usuario.setPerfil(dados.getPerfil());
+        }
+
         // Se a senha não vier no corpo da requisição, mantém a atual.
         if (dados.getSenha() != null) {
             validarSenha(dados.getSenha());
-            usuario.setSenha(dados.getSenha());
+            usuario.setSenha(passwordEncoder.encode(dados.getSenha()));
         }
 
         try {

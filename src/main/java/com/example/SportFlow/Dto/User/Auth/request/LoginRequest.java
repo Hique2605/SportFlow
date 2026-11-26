@@ -1,9 +1,9 @@
 package com.example.SportFlow.Dto.User.Auth.request;
 
-import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.NotBlank;
 
-public record LoginRequest(@NotEmpty(message = "E-mail é obrigatório")
+public record LoginRequest(@NotBlank(message = "E-mail é obrigatório")
                            String email,
-                           @NotEmpty(message = "Senha é obrigatória")
+                           @NotBlank(message = "Senha é obrigatória")
                            String password) {
 }

@@ -4,6 +4,7 @@ import com.example.SportFlow.Dto.AgendamentoDto.AgendamentoRequestDTO;
 import com.example.SportFlow.Dto.AgendamentoDto.AgendamentoResponseDTO;
 import com.example.SportFlow.Dto.AgendamentoDto.AgendamentoStatusDTO;
 import com.example.SportFlow.Service.AgendamentoService;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -14,6 +15,7 @@ import java.net.URI;
 import java.util.List;
 import java.util.UUID;
 
+@Tag(name = "Agendamentos", description = "Cliente gerencia os próprios agendamentos; ADMIN vê e altera todos.")
 @RestController
 @RequestMapping("/agendamentos")
 @RequiredArgsConstructor

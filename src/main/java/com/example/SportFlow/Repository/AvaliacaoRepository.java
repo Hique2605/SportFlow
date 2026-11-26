@@ -7,6 +7,7 @@ import org.springframework.stereotype.Repository;
 import java.util.UUID;
 
 @Repository
-public interface AvaliacaoRepository extends JpaRepository<Avaliacao,UUID> {
+public interface AvaliacaoRepository extends JpaRepository<Avaliacao, UUID> {
 
+    boolean existsByAgendamentoId(UUID agendamentoId);
 }

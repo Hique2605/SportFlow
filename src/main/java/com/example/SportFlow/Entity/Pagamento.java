@@ -30,6 +30,7 @@ public class Pagamento {
             nullable = false,
             unique = true
     )
+    @ToString.Exclude
     private Agendamento agendamento;
 
     @Column(nullable = false, precision = 10, scale = 2)

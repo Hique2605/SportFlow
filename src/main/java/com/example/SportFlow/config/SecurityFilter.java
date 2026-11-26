@@ -4,17 +4,24 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import org.apache.logging.log4j.util.Strings;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
-import java.util.Optional;
+import java.util.List;
 
+/**
+ * Executa uma vez por requisição: lê o header "Authorization: Bearer <token>",
+ * valida o JWT e, se estiver válido, marca o usuário como autenticado
+ * (com o perfil como ROLE_ADMIN ou ROLE_CLIENTE).
+ */
 @Component
 public class SecurityFilter extends OncePerRequestFilter {
+
+    private static final String PREFIXO = "Bearer ";
 
     private final TokenConfig tokenConfig;
 
@@ -23,20 +30,22 @@ public class SecurityFilter extends OncePerRequestFilter {
     }
 
     @Override
-    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain) throws ServletException, IOException {
-        String authorizationHeader = request.getHeader("Authorization");
-        if (Strings.isNotEmpty(authorizationHeader) && authorizationHeader.startsWith("Bearer ")) {
-            String token = authorizationHeader.substring("Bearer ".length());
-            Optional<JWTUserData> optUser = tokenConfig.validateToken(token);
+    protected void doFilterInternal(HttpServletRequest request,
+                                    HttpServletResponse response,
+                                    FilterChain filterChain) throws ServletException, IOException {
 
-            if (optUser.isPresent()) {
-                JWTUserData userData = optUser.get();
-                UsernamePasswordAuthenticationToken authenticationToken = new UsernamePasswordAuthenticationToken(userData, null, null);
-                SecurityContextHolder.getContext().setAuthentication(authenticationToken);
-            }
-            filterChain.doFilter(request, response);
-        } else {
-            filterChain.doFilter(request, response);
+        String authorizationHeader = request.getHeader("Authorization");
+
+        if (authorizationHeader != null && authorizationHeader.startsWith(PREFIXO)) {
+            String token = authorizationHeader.substring(PREFIXO.length()).trim();
+
+            tokenConfig.validateToken(token).ifPresent(userData -> {
+                var authorities = List.of(new SimpleGrantedAuthority("ROLE_" + userData.perfil().name()));
+                var authentication = new UsernamePasswordAuthenticationToken(userData, null, authorities);
+                SecurityContextHolder.getContext().setAuthentication(authentication);
+            });
         }
+
+        filterChain.doFilter(request, response);
     }
 }

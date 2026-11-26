@@ -13,28 +13,30 @@ import java.util.UUID;
 
 public interface AgendamentoRepository extends JpaRepository<Agendamento, UUID> {
 
-
     List<Agendamento> findByUsuarioId(UUID usuarioId);
 
     List<Agendamento> findByHorarioId(UUID horarioId);
 
     List<Agendamento> findByStatus(StatusAgendamento status);
 
+    /**
+     * Existe outro agendamento (não cancelado) na MESMA QUADRA, na mesma data,
+     * com intervalo de horas sobreposto? Antes a checagem era só pelo mesmo
+     * horário, o que permitia reservar a quadra duas vezes por horários diferentes.
+     */
     @Query("""
-    SELECT COUNT(a) > 0 FROM Agendamento a
-    WHERE a.horario.id = :horarioId
-      AND a.dataAgendamento = :data
-      AND a.status <> :statusCancelado
-      AND a.horaInicio < :horaFim
-      AND a.horaFim > :horaInicio
-      AND (:ignorarId IS NULL OR a.id <> :ignorarId)
-""")
-    boolean existeConflito(@Param("horarioId") UUID horarioId,
+            SELECT COUNT(a) > 0 FROM Agendamento a
+            WHERE a.horario.quadraId = :quadraId
+              AND a.dataAgendamento = :data
+              AND a.status <> :statusCancelado
+              AND a.horaInicio < :horaFim
+              AND a.horaFim > :horaInicio
+              AND (:ignorarId IS NULL OR a.id <> :ignorarId)
+            """)
+    boolean existeConflito(@Param("quadraId") UUID quadraId,
                            @Param("data") LocalDate data,
                            @Param("horaInicio") LocalTime horaInicio,
                            @Param("horaFim") LocalTime horaFim,
                            @Param("ignorarId") UUID ignorarId,
                            @Param("statusCancelado") StatusAgendamento statusCancelado);
 }
-
-

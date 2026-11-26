@@ -1,5 +1,6 @@
 package com.example.SportFlow.Dto.Pagamento;
 
+import com.example.SportFlow.Entity.Pagamento;
 import com.example.SportFlow.Enum.PagamentoStatus;
 
 import java.math.BigDecimal;
@@ -14,4 +15,11 @@ public record PagamentoResponse(
         PagamentoStatus status,
         OffsetDateTime criadoEm,
         OffsetDateTime pagoEm
-) {}
+) {
+    public static PagamentoResponse from(Pagamento p) {
+        return new PagamentoResponse(
+                p.getId(), p.getAgendamento().getId(), p.getValor(), p.getForma(),
+                p.getStatus(), p.getCriadoEm(), p.getPagoEm()
+        );
+    }
+}

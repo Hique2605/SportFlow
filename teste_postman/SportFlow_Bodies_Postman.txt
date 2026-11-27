@@ -1,36 +1,50 @@
-SPORTFLOW — BODIES PARA TESTAR NO POSTMAN
-========================================
+SPORTFLOW — BODIES PARA TESTAR NO POSTMAN / SWAGGER
+====================================================
+
+Dica: importe o arquivo SportFlow.postman_collection.json (mesma pasta) e rode
+as pastas em ordem. Ela usa 3 tokens (tokenAdmin, token do cliente e tokenGestor)
+e guarda os ids automaticamente.
 
 Base URL: http://localhost:8080
 Body: raw -> JSON
-Para rotas protegidas: Authorization -> Bearer Token
+Rotas protegidas: aba Authorization -> Bearer Token -> cole o token
+(no Swagger: botão "Authorize", cole só o token, sem a palavra Bearer)
 
-ATENÇÃO: As rotas (exceto /auth/register e /auth/login) e os formatos dos relacionamentos são exemplos e dependem dos Controllers/DTOs implementados. Substitua todos os UUIDs ilustrativos pelos IDs retornados após cada cadastro. Não reutilize a senha de exemplo em produção.
+PERFIS
+- ADMIN (admin / admin, criado pela V1.2 e simplificado pela V1.3):
+  tudo: esportes, criar/excluir estabelecimentos, funcionários, usuários,
+  alterar/excluir pagamentos, excluir agendamentos.
+- GESTOR = CLIENTE vinculado como FUNCIONÁRIO ativo de um estabelecimento
+  (o ADMIN faz o vínculo em POST /api/funcionarios). Só no(s) estabelecimento(s) dele:
+  edita o estabelecimento, cria/edita/exclui quadras e horários, vê as reservas e
+  pagamentos, confirma/cancela pagamentos e muda o status das reservas.
+  Um usuário pode ser funcionário de vários estabelecimentos (V1.4).
+- CLIENTE (quem se cadastra em /auth/register):
+  lê o catálogo e cuida dos PRÓPRIOS agendamentos, pagamentos e avaliações.
 
-1. USUÁRIO
-POST http://localhost:8080/auth/register
-{
-  "name": "Henrique Teste",
-  "email": "henrique.teste@sportflow.com",
-  "password": "123456"
-}
+0. LOGIN ADMIN
+POST /auth/login
+{ "email": "admin", "password": "admin" }
 
-LOGIN — OBTER JWT
-POST http://localhost:8080/auth/login
-{
-  "email": "henrique.teste@sportflow.com",
-  "password": "123456"
-}
+1. CADASTRO DE CLIENTE (público)  -> resposta traz o id do usuário
+POST /auth/register
+{ "name": "Henrique Teste", "email": "henrique.teste@sportflow.com", "password": "SenhaForte123" }
 
-2. ESPORTE
-POST http://localhost:8080/api/esportes
-{
-  "nome": "Futebol",
-  "descricao": "Futebol society"
-}
+LOGIN CLIENTE
+POST /auth/login
+{ "email": "henrique.teste@sportflow.com", "password": "SenhaForte123" }
 
-3. ESTABELECIMENTO
-POST http://localhost:8080/api/estabelecimentos
+MEUS DADOS (qualquer logado)
+GET /usuarios/me
+ESTABELECIMENTOS QUE EU GERENCIO (vazio se não for funcionário)
+GET /usuarios/me/estabelecimentos
+
+2. ESPORTE (token ADMIN)
+POST /api/esportes
+{ "nome": "Futebol", "descricao": "Futebol society" }
+
+3. ESTABELECIMENTO (token ADMIN)
+POST /api/estabelecimentos
 {
   "nome": "Arena SportFlow",
   "email": "arena@sportflow.com",
@@ -41,72 +55,71 @@ POST http://localhost:8080/api/estabelecimentos
   "bairro": "Centro",
   "cidade": "Criciúma",
   "estado": "SC",
-  "cep": "88801000",
+  "cep": "88801-000",
   "ativo": true
 }
 
-4. FUNCIONÁRIO
-POST http://localhost:8080/api/funcionarios
+4. FUNCIONÁRIO = GESTOR (token ADMIN) -> o usuário passa a gerenciar o estabelecimento
+POST /api/funcionarios
 {
-  "usuario": { "id": "550e8400-e29b-41d4-a716-446655440001" },
-  "estabelecimento": { "id": "550e8400-e29b-41d4-a716-446655440002" },
+  "usuarioId": "<id do usuário>",
+  "estabelecimentoId": "<id do estabelecimento>",
   "cargo": "ADMINISTRADOR",
   "dataAdmissao": "2026-11-02",
   "ativo": true
 }
 
-5. QUADRA
-POST http://localhost:8080/api/quadras
+5. QUADRA (token ADMIN ou GESTOR do estabelecimento)
+- esporteIds é obrigatório: lista dos esportes que a quadra aceita (V1.5)
+POST /api/quadras
 {
-  "estabelecimento": { "id": "550e8400-e29b-41d4-a716-446655440002" },
+  "estabelecimentoId": "<id do estabelecimento>",
   "nome": "Quadra Society 1",
   "descricao": "Quadra de futebol society",
   "valorHora": 120.00,
-  "ativo": true
+  "ativo": true,
+  "esporteIds": ["<id do esporte>"]
 }
 
-6. HORÁRIO
-POST http://localhost:8080/api/horarios
+6. HORÁRIO (token ADMIN ou GESTOR)   diaSemana: 0 = domingo, 1 = segunda ... 6 = sábado
+- o esporte precisa estar na lista esporteIds da quadra (senão 400)
+- não pode sobrepor outro horário da mesma quadra no mesmo dia (senão 409)
+POST /api/horarios
 {
-  "quadra": { "id": "550e8400-e29b-41d4-a716-446655440003" },
-  "esporte": { "id": "550e8400-e29b-41d4-a716-446655440004" },
+  "quadraId": "<id da quadra>",
+  "esporteId": "<id do esporte>",
   "diaSemana": 1,
   "horaInicio": "08:00:00",
-  "horaFim": "09:00:00",
+  "horaFim": "10:00:00",
   "ativo": true
 }
 
-7. AGENDAMENTO
-POST http://localhost:8080/api/agendamentos
+7. AGENDAMENTO (token CLIENTE)
+POST /agendamentos
+- dataAgendamento precisa cair no dia da semana do horário (aqui: uma segunda-feira futura)
+- horaInicio/horaFim precisam ficar dentro do horário (08:00 às 10:00)
+- usuarioId é opcional (usa o dono do token); valorTotal é calculado pelo servidor
 {
-  "usuario": { "id": "550e8400-e29b-41d4-a716-446655440001" },
-  "horario": { "id": "550e8400-e29b-41d4-a716-446655440005" },
-  "dataAgendamento": "2026-11-09",
+  "horarioId": "<id do horário>",
+  "dataAgendamento": "2026-12-07",
   "horaInicio": "08:00:00",
   "horaFim": "09:00:00",
-  "valorTotal": 120.00,
-  "status": "PENDENTE",
   "observacao": "Agendamento criado para teste"
 }
 
-8. PAGAMENTO
-POST http://localhost:8080/api/pagamentos
-{
-  "agendamento": { "id": "550e8400-e29b-41d4-a716-446655440006" },
-  "valor": 120.00,
-  "forma": "PIX"
-}
+Mudar status (ADMIN ou GESTOR): PATCH /agendamentos/{id}/status   { "status": "CONCLUIDO" }
+Cancelar (dono, GESTOR ou ADMIN): PATCH /agendamentos/{id}/cancelar
 
-9. AVALIAÇÃO
-POST http://localhost:8080/api/avaliacoes
-{
-  "agendamento": { "id": "550e8400-e29b-41d4-a716-446655440006" },
-  "nota": 5,
-  "comentario": "Excelente experiência!"
-}
+8. PAGAMENTO (token CLIENTE dono do agendamento)
+POST /pagamentos
+{ "agendamentoId": "<id do agendamento>", "valor": 120.00, "forma": "PIX" }
 
-OBSERVAÇÕES
-- Execute os POSTs na ordem indicada por causa das chaves estrangeiras.
-- O status de pagamento é definido como PENDENTE pelo PagamentoService.
-- A tabela flyway_schema_history é gerenciada pelo Flyway e não requer POST.
-- Se o Controller usar DTOs com campos como usuarioId ou quadraId, adapte o JSON ao DTO.
+Confirmar (ADMIN ou GESTOR): PATCH /pagamentos/{id}/confirmar  -> agendamento vira CONFIRMADO
+
+9. AVALIAÇÃO (token CLIENTE dono do agendamento)
+POST /avaliacao
+{ "agendamentoId": "<id do agendamento>", "nota": 5, "comentario": "Excelente experiência!" }
+
+CÓDIGOS DE RESPOSTA
+200/201/204 sucesso | 400 dados inválidos | 401 sem token, token inválido/vencido ou senha errada
+403 logado mas sem permissão | 404 não encontrado | 409 conflito (duplicado, horário ocupado, regra de negócio)

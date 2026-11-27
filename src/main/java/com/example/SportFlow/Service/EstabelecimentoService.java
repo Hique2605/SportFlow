@@ -2,6 +2,7 @@ package com.example.SportFlow.Service;
 
 import com.example.SportFlow.Entity.Estabelecimento;
 import com.example.SportFlow.Repository.EstabelecimentoRepository;
+import com.example.SportFlow.config.UsuarioLogado;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Sort;
@@ -19,6 +20,7 @@ import java.util.UUID;
 public class EstabelecimentoService {
 
     private final EstabelecimentoRepository repository;
+    private final UsuarioLogado usuarioLogado;
 
     @Transactional
     public Estabelecimento criar(Estabelecimento dados) {
@@ -45,6 +47,14 @@ public class EstabelecimentoService {
         return repository.findAll(Sort.by("nome"));
     }
 
+    /** Estabelecimentos que o usuário logado gerencia (vazio para quem não é funcionário). */
+    @Transactional(readOnly = true)
+    public List<Estabelecimento> listarGerenciados() {
+        return repository.findAllById(usuarioLogado.estabelecimentosGerenciados()).stream()
+                .sorted((a, b) -> a.getNome().compareToIgnoreCase(b.getNome()))
+                .toList();
+    }
+
     @Transactional(readOnly = true)
     public Estabelecimento buscar(UUID id) {
         return encontrar(id);
@@ -53,6 +63,8 @@ public class EstabelecimentoService {
     @Transactional
     public Estabelecimento atualizar(UUID id, Estabelecimento dados) {
         Estabelecimento estabelecimento = encontrar(id);
+        // ADMIN ou gestor (funcionário ativo) deste estabelecimento
+        usuarioLogado.verificarGestor(id);
         validarDados(dados);
 
         String email = normalizarEmail(dados.getEmail());

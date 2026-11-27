@@ -12,6 +12,7 @@ import java.util.UUID;
 public record AgendamentoResponseDTO(
         UUID id,
         UUID usuarioId,
+        String usuarioNome,
         UUID horarioId,
         LocalDate dataAgendamento,
         LocalTime horaInicio,
@@ -26,6 +27,7 @@ public record AgendamentoResponseDTO(
         return new AgendamentoResponseDTO(
                 a.getId(),
                 a.getUsuario().getId(),
+                a.getUsuario().getNome(),
                 a.getHorario().getId(),
                 a.getDataAgendamento(),
                 a.getHoraInicio(),

@@ -27,10 +27,12 @@ public class FuncionarioService {
         validarDados(dados);
         validarReferencias(dados);
 
-        if (repository.existsByUsuarioId(dados.getUsuarioId())) {
+        // O mesmo usuário pode trabalhar em vários estabelecimentos,
+        // mas só pode ter um vínculo com cada um.
+        if (repository.existsByUsuarioIdAndEstabelecimentoId(dados.getUsuarioId(), dados.getEstabelecimentoId())) {
             throw new ResponseStatusException(
                     HttpStatus.CONFLICT,
-                    "Este usuário já está cadastrado como funcionário"
+                    "Este usuário já é funcionário deste estabelecimento"
             );
         }
 
@@ -58,18 +60,17 @@ public class FuncionarioService {
 
         boolean mudouUsuario =
                 !funcionario.getUsuarioId().equals(dados.getUsuarioId());
-
-        if (mudouUsuario
-                && repository.existsByUsuarioId(dados.getUsuarioId())) {
-            throw new ResponseStatusException(
-                    HttpStatus.CONFLICT,
-                    "Este usuário já está cadastrado como funcionário"
-            );
-        }
-
         boolean mudouEstabelecimento =
                 !funcionario.getEstabelecimentoId()
                         .equals(dados.getEstabelecimentoId());
+
+        if ((mudouUsuario || mudouEstabelecimento)
+                && repository.existsByUsuarioIdAndEstabelecimentoId(dados.getUsuarioId(), dados.getEstabelecimentoId())) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Este usuário já é funcionário deste estabelecimento"
+            );
+        }
 
         if (mudouEstabelecimento) {
             repository.removerComoResponsavel(id);

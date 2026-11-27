@@ -8,6 +8,7 @@ import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 
@@ -18,6 +19,15 @@ public interface AgendamentoRepository extends JpaRepository<Agendamento, UUID> 
     List<Agendamento> findByHorarioId(UUID horarioId);
 
     List<Agendamento> findByStatus(StatusAgendamento status);
+
+    /** Agendamentos das quadras dos estabelecimentos informados (visão do gestor). */
+    @Query("""
+            SELECT a FROM Agendamento a
+            WHERE a.horario.quadraId IN (
+                SELECT q.id FROM Quadra q WHERE q.estabelecimentoId IN :estabelecimentoIds
+            )
+            """)
+    List<Agendamento> findByEstabelecimentos(@Param("estabelecimentoIds") Collection<UUID> estabelecimentoIds);
 
     /**
      * Existe outro agendamento (não cancelado) na MESMA QUADRA, na mesma data,

@@ -27,7 +27,10 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Duration;
 import java.time.OffsetDateTime;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 @Slf4j
@@ -65,20 +68,32 @@ public class AgendamentoService {
         return AgendamentoResponseDTO.fromEntity(salvo);
     }
 
-    /** ADMIN vê todos; CLIENTE vê só os próprios. */
+    /**
+     * ADMIN vê todos.
+     * Os demais veem os próprios + os dos estabelecimentos que gerenciam (gestor).
+     */
     @Transactional(readOnly = true)
     public List<AgendamentoResponseDTO> listar() {
-        List<Agendamento> lista = usuarioLogado.isAdmin()
-                ? agendamentoRepository.findAll()
-                : agendamentoRepository.findByUsuarioId(usuarioLogado.id());
+        if (usuarioLogado.isAdmin()) {
+            return agendamentoRepository.findAll().stream().map(AgendamentoResponseDTO::fromEntity).toList();
+        }
 
-        return lista.stream().map(AgendamentoResponseDTO::fromEntity).toList();
+        // LinkedHashMap pelo id: junta as duas listas sem repetir
+        Map<UUID, Agendamento> todos = new LinkedHashMap<>();
+        agendamentoRepository.findByUsuarioId(usuarioLogado.id()).forEach(a -> todos.put(a.getId(), a));
+
+        Set<UUID> gerenciados = usuarioLogado.estabelecimentosGerenciados();
+        if (!gerenciados.isEmpty()) {
+            agendamentoRepository.findByEstabelecimentos(gerenciados).forEach(a -> todos.put(a.getId(), a));
+        }
+
+        return todos.values().stream().map(AgendamentoResponseDTO::fromEntity).toList();
     }
 
     @Transactional(readOnly = true)
     public AgendamentoResponseDTO buscarPorId(UUID id) {
         Agendamento agendamento = buscarEntidade(id);
-        usuarioLogado.verificarDonoOuAdmin(agendamento.getUsuario().getId());
+        usuarioLogado.verificarDonoOuGestor(agendamento.getUsuario().getId(), estabelecimentoDe(agendamento));
         return AgendamentoResponseDTO.fromEntity(agendamento);
     }
 
@@ -118,21 +133,22 @@ public class AgendamentoService {
         return AgendamentoResponseDTO.fromEntity(agendamentoRepository.save(entity));
     }
 
-    /** Somente ADMIN (regra no SecurityConfig). */
+    /** ADMIN ou gestor do estabelecimento da reserva. */
     @Transactional
     public AgendamentoResponseDTO atualizarStatus(UUID id, StatusAgendamento novoStatus) {
         Agendamento entity = buscarEntidade(id);
+        usuarioLogado.verificarGestor(estabelecimentoDe(entity));
         entity.setStatus(novoStatus);
         entity.setAtualizadoEm(OffsetDateTime.now());
         log.info("Agendamento {} alterado para {}", id, novoStatus);
         return AgendamentoResponseDTO.fromEntity(agendamentoRepository.save(entity));
     }
 
-    /** Dono ou ADMIN. Também cancela o pagamento, se ainda estiver pendente. */
+    /** Dono, gestor do estabelecimento ou ADMIN. Também cancela o pagamento, se ainda estiver pendente. */
     @Transactional
     public void cancelar(UUID id) {
         Agendamento entity = buscarEntidade(id);
-        usuarioLogado.verificarDonoOuAdmin(entity.getUsuario().getId());
+        usuarioLogado.verificarDonoOuGestor(entity.getUsuario().getId(), estabelecimentoDe(entity));
 
         if (entity.getStatus() == StatusAgendamento.CONCLUIDO) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
@@ -216,6 +232,13 @@ public class AgendamentoService {
         return quadra.getValorHora()
                 .multiply(BigDecimal.valueOf(minutos))
                 .divide(BigDecimal.valueOf(60), 2, RoundingMode.HALF_UP);
+    }
+
+    /** Agendamento -> horário -> quadra -> estabelecimento. */
+    private UUID estabelecimentoDe(Agendamento agendamento) {
+        return quadraRepository.findById(agendamento.getHorario().getQuadraId())
+                .map(Quadra::getEstabelecimentoId)
+                .orElse(null);
     }
 
     private Agendamento buscarEntidade(UUID id) {

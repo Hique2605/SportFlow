@@ -21,13 +21,17 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
  * Regras de acesso (autenticação + autorização).
  *
  * Público ............ POST /auth/login, POST /auth/register, Swagger
- * ADMIN .............. /usuarios/** (exceto GET /usuarios/me), /api/funcionarios/**,
- *                      escrita (POST/PUT/DELETE) em esportes, estabelecimentos, quadras e horários,
- *                      PATCH /agendamentos/{id}/status, DELETE /agendamentos/{id},
- *                      PATCH /pagamentos/{id}/confirmar, PUT e DELETE /pagamentos/{id}
+ * ADMIN .............. /usuarios/** (exceto /usuarios/me), /api/funcionarios/**,
+ *                      escrita em esportes, criar/excluir estabelecimento,
+ *                      DELETE /agendamentos/{id}, PUT e DELETE /pagamentos/{id}
+ * ADMIN ou GESTOR .... editar o estabelecimento, criar/editar/excluir quadras e horários,
+ *                      PATCH /agendamentos/{id}/status, PATCH /pagamentos/{id}/confirmar
+ *                      -> aqui o SecurityConfig só exige login; quem confere se o usuário
+ *                         gerencia AQUELE estabelecimento são os services (UsuarioLogado.verificarGestor)
  * Qualquer logado .... leitura do catálogo, agendamentos, pagamentos e avaliações
  *                      (os services ainda verificam se o recurso é do próprio usuário)
  *
+ * GESTOR = usuário com vínculo de funcionário ativo no estabelecimento.
  * Sem token / token inválido -> 401 | Logado sem permissão -> 403
  */
 @Configuration
@@ -65,22 +69,25 @@ public class SecurityConfig {
                         .requestMatchers("/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**").permitAll()
 
                         // Usuários
-                        .requestMatchers(HttpMethod.GET, "/usuarios/me").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/usuarios/me", "/usuarios/me/**").authenticated()
                         .requestMatchers("/usuarios/**").hasRole("ADMIN")
 
                         // Funcionários
                         .requestMatchers("/api/funcionarios/**").hasRole("ADMIN")
 
-                        // Catálogo: todos leem, só ADMIN altera
+                        // Catálogo: todos leem
                         .requestMatchers(HttpMethod.GET, CATALOGO).authenticated()
-                        .requestMatchers(CATALOGO).hasRole("ADMIN")
+                        // Esportes e criar/excluir estabelecimento: só ADMIN
+                        .requestMatchers("/api/esportes/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/estabelecimentos").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/api/estabelecimentos/**").hasRole("ADMIN")
+                        // Editar estabelecimento, quadras e horários: ADMIN ou gestor (conferido no service)
+                        .requestMatchers(CATALOGO).authenticated()
 
-                        // Agendamentos
-                        .requestMatchers(HttpMethod.PATCH, "/agendamentos/*/status").hasRole("ADMIN")
+                        // Agendamentos (mudar status: ADMIN ou gestor, conferido no service)
                         .requestMatchers(HttpMethod.DELETE, "/agendamentos/**").hasRole("ADMIN")
 
-                        // Pagamentos
-                        .requestMatchers(HttpMethod.PATCH, "/pagamentos/*/confirmar").hasRole("ADMIN")
+                        // Pagamentos (confirmar: ADMIN ou gestor, conferido no service)
                         .requestMatchers(HttpMethod.PUT, "/pagamentos/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.DELETE, "/pagamentos/**").hasRole("ADMIN")
 

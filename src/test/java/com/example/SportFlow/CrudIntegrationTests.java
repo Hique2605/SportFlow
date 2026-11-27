@@ -164,7 +164,7 @@ class CrudIntegrationTests {
     void deveExecutarCrudDoCatalogo() throws Exception {
         String estabelecimentoId = criarEstabelecimento();
         String esporteId = criarEsporte("Futebol");
-        String quadraId = criarQuadra(estabelecimentoId);
+        String quadraId = criarQuadra(estabelecimentoId, esporteId);
         String horarioId = criarHorario(quadraId, esporteId);
 
         mockMvc.perform(com(get("/api/esportes/{id}", esporteId), tokenCliente))
@@ -182,8 +182,8 @@ class CrudIntegrationTests {
         mockMvc.perform(com(put("/api/quadras/{id}", quadraId), tokenAdmin)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"estabelecimentoId": "%s", "nome": "Quadra atualizada", "valorHora": 150.00}
-                                """.formatted(estabelecimentoId)))
+                                {"estabelecimentoId": "%s", "nome": "Quadra atualizada", "valorHora": 150.00, "esporteIds": ["%s"]}
+                                """.formatted(estabelecimentoId, esporteId)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.nome").value("Quadra atualizada"));
 
@@ -206,8 +206,9 @@ class CrudIntegrationTests {
 
     @Test
     void deveExecutarFluxoAgendamentoPagamentoAvaliacao() throws Exception {
-        String quadraId = criarQuadra(criarEstabelecimento());
-        String horarioId = criarHorario(quadraId, criarEsporte("Tênis"));
+        String esporteId = criarEsporte("Tênis");
+        String quadraId = criarQuadra(criarEstabelecimento(), esporteId);
+        String horarioId = criarHorario(quadraId, esporteId);
         LocalDate segunda = LocalDate.now().with(TemporalAdjusters.next(DayOfWeek.MONDAY));
 
         // 1) cliente agenda (valor calculado: 120,00/h x 1h)
@@ -290,6 +291,133 @@ class CrudIntegrationTests {
                 .andExpect(jsonPath("$.length()").value(0));
     }
 
+    // ------------------------------------------------------------------ gestor e esportes da quadra
+
+    @Test
+    void gestorGerenciaSomenteOsProprios_EstabelecimentosEQuadraSoAceitaSeusEsportes() throws Exception {
+        String futebol = criarEsporte("Futebol");
+        String volei = criarEsporte("Vôlei");
+        String meu = criarEstabelecimento("Arena do Gestor", "gestor@arena.test");
+        String outro = criarEstabelecimento("Outra Arena", "outra@arena.test");
+        String outroAinda = criarEstabelecimento("Terceira Arena", "terceira@arena.test");
+
+        // O cliente vira gestor (funcionário) de DOIS estabelecimentos -> permitido desde a V1.4
+        vincularFuncionario(clienteId, meu);
+        vincularFuncionario(clienteId, outroAinda);
+        // ...mas não duas vezes no mesmo -> 409
+        mockMvc.perform(com(post("/api/funcionarios"), tokenAdmin)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"usuarioId": "%s", "estabelecimentoId": "%s", "cargo": "Gerente", "dataAdmissao": "2026-01-10"}
+                                """.formatted(clienteId, meu)))
+                .andExpect(status().isConflict());
+
+        // /usuarios/me/estabelecimentos lista o que ele gerencia
+        mockMvc.perform(com(get("/usuarios/me/estabelecimentos"), tokenCliente))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(2));
+
+        // Edita o próprio estabelecimento (200), o dos outros não (403)
+        String dadosEstab = """
+                {"nome": "%s", "email": "%s", "estado": "SC", "cep": "88801-000"}
+                """;
+        mockMvc.perform(com(put("/api/estabelecimentos/{id}", meu), tokenCliente)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(dadosEstab.formatted("Arena do Gestor (editada)", "gestor@arena.test")))
+                .andExpect(status().isOk());
+        mockMvc.perform(com(put("/api/estabelecimentos/{id}", outro), tokenCliente)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(dadosEstab.formatted("Invasão", "outra@arena.test")))
+                .andExpect(status().isForbidden());
+
+        // Criar estabelecimento e esporte continua sendo só do ADMIN
+        mockMvc.perform(com(post("/api/estabelecimentos"), tokenCliente)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(dadosEstab.formatted("Nova", "nova@arena.test")))
+                .andExpect(status().isForbidden());
+
+        // Quadra: sem esportes -> 400 ; no próprio estabelecimento -> 201 ; no dos outros -> 403
+        String quadraJson = """
+                {"estabelecimentoId": "%s", "nome": "Areia 1", "valorHora": 80.00, "esporteIds": [%s]}
+                """;
+        mockMvc.perform(com(post("/api/quadras"), tokenCliente)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(quadraJson.formatted(meu, "")))
+                .andExpect(status().isBadRequest());
+        String quadra = idDe(mockMvc.perform(com(post("/api/quadras"), tokenCliente)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(quadraJson.formatted(meu, "\"" + volei + "\""))));
+        mockMvc.perform(com(post("/api/quadras"), tokenCliente)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(quadraJson.formatted(outro, "\"" + volei + "\"")))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(com(get("/api/quadras/{id}", quadra), tokenCliente))
+                .andExpect(jsonPath("$.esporteIds[0]").value(volei));
+
+        // Horário com esporte que a quadra não aceita (futebol na areia) -> 400 ; com vôlei -> 201
+        String horarioJson = """
+                {"quadraId": "%s", "esporteId": "%s", "diaSemana": 1, "horaInicio": "18:00:00", "horaFim": "19:00:00"}
+                """;
+        mockMvc.perform(com(post("/api/horarios"), tokenCliente)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(horarioJson.formatted(quadra, futebol)))
+                .andExpect(status().isBadRequest());
+        String horario = idDe(mockMvc.perform(com(post("/api/horarios"), tokenCliente)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(horarioJson.formatted(quadra, volei))));
+
+        // Tirar o vôlei da quadra enquanto há horário de vôlei -> 409
+        mockMvc.perform(com(put("/api/quadras/{id}", quadra), tokenCliente)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(quadraJson.formatted(meu, "\"" + futebol + "\"")))
+                .andExpect(status().isConflict());
+
+        // Outro cliente reserva e paga no estabelecimento do gestor
+        String tokenJogador = registrarELogar("Jogador", "jogador@teste.com");
+        LocalDate segunda = LocalDate.now().with(TemporalAdjusters.next(DayOfWeek.MONDAY));
+        String agendamento = idDe(mockMvc.perform(com(post("/agendamentos"), tokenJogador)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {"horarioId": "%s", "dataAgendamento": "%s", "horaInicio": "18:00", "horaFim": "19:00"}
+                        """.formatted(horario, segunda))));
+        String pagamento = idDe(mockMvc.perform(com(post("/pagamentos"), tokenJogador)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {"agendamentoId": "%s", "valor": 80.00, "forma": "PIX"}
+                        """.formatted(agendamento))));
+
+        // O gestor enxerga a reserva e o pagamento (com o nome do cliente)
+        mockMvc.perform(com(get("/agendamentos"), tokenCliente))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.id == '%s')].usuarioNome".formatted(agendamento)).value("Jogador"));
+        mockMvc.perform(com(get("/pagamentos/{id}", pagamento), tokenCliente)).andExpect(status().isOk());
+
+        // O próprio jogador não confirma; o gestor confirma -> reserva CONFIRMADA
+        mockMvc.perform(com(patch("/pagamentos/{id}/confirmar", pagamento), tokenJogador))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(com(patch("/pagamentos/{id}/confirmar", pagamento), tokenCliente))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("PAGO"));
+        mockMvc.perform(com(get("/agendamentos/{id}", agendamento), tokenJogador))
+                .andExpect(jsonPath("$.status").value("CONFIRMADO"));
+
+        // O gestor muda o status da reserva; um estranho não vê nem muda
+        mockMvc.perform(com(patch("/agendamentos/{id}/status", agendamento), tokenCliente)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"status": "CONCLUIDO"}
+                                """))
+                .andExpect(status().isOk());
+        String tokenEstranho = registrarELogar("Estranho", "estranho@teste.com");
+        mockMvc.perform(com(get("/agendamentos/{id}", agendamento), tokenEstranho)).andExpect(status().isForbidden());
+        mockMvc.perform(com(patch("/agendamentos/{id}/status", agendamento), tokenEstranho)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"status": "CANCELADO"}
+                                """))
+                .andExpect(status().isForbidden());
+    }
+
     // ------------------------------------------------------------------ auxiliares
 
     private String login(String email, String senha) throws Exception {
@@ -308,11 +436,33 @@ class CrudIntegrationTests {
     }
 
     private String criarEstabelecimento() throws Exception {
+        return criarEstabelecimento("SportFlow Arena", "arena@sportflow.test");
+    }
+
+    private String criarEstabelecimento(String nome, String email) throws Exception {
         return idDe(mockMvc.perform(com(post("/api/estabelecimentos"), tokenAdmin)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
-                        {"nome": "SportFlow Arena", "email": "arena@sportflow.test", "estado": "SC", "cep": "88801-000"}
-                        """)));
+                        {"nome": "%s", "email": "%s", "estado": "SC", "cep": "88801-000"}
+                        """.formatted(nome, email))));
+    }
+
+    private String vincularFuncionario(String usuarioId, String estabelecimentoId) throws Exception {
+        return idDe(mockMvc.perform(com(post("/api/funcionarios"), tokenAdmin)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {"usuarioId": "%s", "estabelecimentoId": "%s", "cargo": "Gerente", "dataAdmissao": "2026-01-10"}
+                        """.formatted(usuarioId, estabelecimentoId))));
+    }
+
+    private String registrarELogar(String nome, String email) throws Exception {
+        mockMvc.perform(post("/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name": "%s", "email": "%s", "password": "%s"}
+                                """.formatted(nome, email, SENHA)))
+                .andExpect(status().isCreated());
+        return login(email, SENHA);
     }
 
     private String criarEsporte(String nome) throws Exception {
@@ -323,12 +473,12 @@ class CrudIntegrationTests {
                         """.formatted(nome))));
     }
 
-    private String criarQuadra(String estabelecimentoId) throws Exception {
+    private String criarQuadra(String estabelecimentoId, String esporteId) throws Exception {
         return idDe(mockMvc.perform(com(post("/api/quadras"), tokenAdmin)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
-                        {"estabelecimentoId": "%s", "nome": "Quadra principal", "valorHora": 120.00, "ativo": true}
-                        """.formatted(estabelecimentoId))));
+                        {"estabelecimentoId": "%s", "nome": "Quadra principal", "valorHora": 120.00, "ativo": true, "esporteIds": ["%s"]}
+                        """.formatted(estabelecimentoId, esporteId))));
     }
 
     private String criarHorario(String quadraId, String esporteId) throws Exception {

@@ -160,6 +160,8 @@ curl --request POST http://localhost:8080/auth/register \
   }'
 ```
 
+> A senha precisa ter pelo menos 8 caracteres.
+
 #### 2. Faça login
 
 ```bash
@@ -181,13 +183,44 @@ Resposta esperada:
 
 Use o token retornado nas próximas requisições. Ele possui validade de **24 horas**.
 
+### Credenciais e perfis
+
+A migration `V1.2` cria o administrador inicial e a `V1.3` simplifica o login dele:
+
+| Perfil | E-mail | Senha |
+|---|---|---|
+| ADMIN | `admin` | `admin` |
+
+Todo usuário criado por `POST /auth/register` recebe o perfil **CLIENTE**. Um ADMIN pode criar outros administradores em `POST /usuarios` (campo `"perfil": "ADMIN"`).
+
+**Gestor de estabelecimento:** não é um perfil novo. É um CLIENTE que o ADMIN vincula como funcionário (`POST /api/funcionarios`). Todo funcionário ativo gerencia o estabelecimento ao qual está ligado, e uma pessoa pode ser funcionária de vários (migration `V1.4`). `GET /usuarios/me/estabelecimentos` lista os que o usuário gerencia.
+
+| Recurso | CLIENTE | GESTOR (só nos seus estabelecimentos) | ADMIN |
+|---|---|---|---|
+| Esportes, usuários, funcionários | Consulta esportes | Consulta esportes | Tudo |
+| Estabelecimentos | Consulta | Edita | Tudo (criar, editar, excluir) |
+| Quadras e horários | Consulta | Cria, edita e exclui | Tudo |
+| Agendamentos | Cria, consulta, altera e cancela **os próprios** | Vê, cancela e muda o status | Tudo, inclusive `DELETE` |
+| Pagamentos | Cria, consulta e cancela **os dos próprios agendamentos** | Vê, confirma e cancela | Tudo, inclusive alterar e excluir |
+| Avaliações | Avalia **os próprios** agendamentos | — | Tudo |
+
+**Quadras e esportes:** cada quadra informa os esportes que aceita (`esporteIds`, obrigatório; migration `V1.5`). Um horário só pode usar um esporte da lista da quadra, e não pode se sobrepor a outro horário da mesma quadra no mesmo dia.
+
+Códigos de erro da segurança: **401** sem token, token inválido/vencido ou senha errada; **403** usuário logado sem permissão.
+
+### Testando com Postman ou Swagger
+
+- **Postman:** importe `teste_postman/SportFlow.postman_collection.json` e rode as pastas em ordem. Os logins salvam os tokens (`token` e `tokenAdmin`) e cada POST guarda o id criado.
+- **Swagger:** faça `POST /auth/login`, copie o valor de `token`, clique em **Authorize** e cole só o token (sem `Bearer`).
+
 ### Endpoints
 
 | Módulo | Método e rota | Descrição |
 |---|---|---|
 | Autenticação | `POST /auth/register` | Cadastra um usuário |
 | Autenticação | `POST /auth/login` | Autentica e retorna um JWT |
-| Usuários | `POST /usuarios` | Cria um usuário |
+| Usuários | `GET /usuarios/me` | Dados do usuário logado |
+| Usuários | `POST /usuarios` | Cria um usuário (ADMIN) |
 | Usuários | `GET /usuarios` · `GET /usuarios/{id}` | Lista ou consulta usuários |
 | Usuários | `PUT /usuarios/{id}` · `DELETE /usuarios/{id}` | Atualiza ou remove um usuário |
 | Estabelecimentos | `POST /api/estabelecimentos` | Cria um estabelecimento |
@@ -276,6 +309,14 @@ erDiagram
     AGENDAMENTO ||--o| PAGAMENTO : gera
     AGENDAMENTO ||--o| AVALIACAO : recebe
 ```
+
+## 🧪 Testes
+
+```powershell
+.\mvnw.cmd test
+```
+
+Os testes de integração (`CrudIntegrationTests`) usam H2 em memória e passam por todas as camadas: login com JWT, permissões por perfil, validações, CRUD do catálogo e o fluxo agendamento → pagamento → avaliação.
 
 ## 📦 Build
 

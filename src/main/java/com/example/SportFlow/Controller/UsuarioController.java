@@ -1,8 +1,10 @@
 package com.example.SportFlow.Controller;
 
+import com.example.SportFlow.Dto.Estabelecimento.EstabelecimentoResponse;
 import com.example.SportFlow.Dto.User.UsuarioRequest;
 import com.example.SportFlow.Dto.User.UsuarioResponse;
 import com.example.SportFlow.Dto.User.UsuarioUpdateRequest;
+import com.example.SportFlow.Service.EstabelecimentoService;
 import com.example.SportFlow.Service.UsuarioService;
 import com.example.SportFlow.config.UsuarioLogado;
 import io.swagger.v3.oas.annotations.Operation;
@@ -23,12 +25,19 @@ import java.util.UUID;
 public class UsuarioController {
 
     private final UsuarioService service;
+    private final EstabelecimentoService estabelecimentoService;
     private final UsuarioLogado usuarioLogado;
 
     @Operation(summary = "Dados do usuário dono do token")
     @GetMapping("/me")
     public UsuarioResponse eu() {
         return UsuarioResponse.from(service.buscar(usuarioLogado.id()));
+    }
+
+    @Operation(summary = "Estabelecimentos que o usuário logado gerencia (é funcionário ativo)")
+    @GetMapping("/me/estabelecimentos")
+    public List<EstabelecimentoResponse> meusEstabelecimentos() {
+        return estabelecimentoService.listarGerenciados().stream().map(EstabelecimentoResponse::from).toList();
     }
 
     @Operation(summary = "Cria um usuário (ADMIN pode definir o perfil)")

@@ -5,10 +5,12 @@ import com.example.SportFlow.Dto.Pagamento.PagamentoResponse;
 import com.example.SportFlow.Dto.Pagamento.PagamentoUpdateRequest;
 import com.example.SportFlow.Entity.Agendamento;
 import com.example.SportFlow.Entity.Pagamento;
+import com.example.SportFlow.Entity.Quadra;
 import com.example.SportFlow.Enum.PagamentoStatus;
 import com.example.SportFlow.Enum.StatusAgendamento;
 import com.example.SportFlow.Repository.AgendamentoRepository;
 import com.example.SportFlow.Repository.PagamentoRepository;
+import com.example.SportFlow.Repository.QuadraRepository;
 import com.example.SportFlow.config.UsuarioLogado;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -19,6 +21,9 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 import java.util.UUID;
 
 /**
@@ -33,6 +38,7 @@ public class PagamentoService {
 
     private final PagamentoRepository pagamentoRepository;
     private final AgendamentoRepository agendamentoRepository;
+    private final QuadraRepository quadraRepository;
     private final UsuarioLogado usuarioLogado;
 
     @Transactional
@@ -65,14 +71,25 @@ public class PagamentoService {
         return PagamentoResponse.from(salvo);
     }
 
-    /** ADMIN vê todos; CLIENTE vê só os dos próprios agendamentos. */
+    /**
+     * ADMIN vê todos.
+     * Os demais veem os dos próprios agendamentos + os dos estabelecimentos que gerenciam.
+     */
     @Transactional(readOnly = true)
     public List<PagamentoResponse> listarTodos() {
-        boolean admin = usuarioLogado.isAdmin();
+        if (usuarioLogado.isAdmin()) {
+            return pagamentoRepository.findAll().stream().map(PagamentoResponse::from).toList();
+        }
+
         UUID logado = usuarioLogado.id();
+        Set<UUID> gerenciados = usuarioLogado.estabelecimentosGerenciados();
+        // quadraId -> estabelecimentoId (uma consulta só, em vez de uma por pagamento)
+        Map<UUID, UUID> estabelecimentoDaQuadra = quadraRepository.findAll().stream()
+                .collect(Collectors.toMap(Quadra::getId, Quadra::getEstabelecimentoId));
 
         return pagamentoRepository.findAll().stream()
-                .filter(p -> admin || p.getAgendamento().getUsuario().getId().equals(logado))
+                .filter(p -> p.getAgendamento().getUsuario().getId().equals(logado)
+                        || gerenciados.contains(estabelecimentoDaQuadra.get(p.getAgendamento().getHorario().getQuadraId())))
                 .map(PagamentoResponse::from)
                 .toList();
     }
@@ -105,10 +122,11 @@ public class PagamentoService {
         return PagamentoResponse.from(pagamentoRepository.save(pagamento));
     }
 
-    /** Somente ADMIN. Confirma o pagamento e o agendamento junto. */
+    /** ADMIN ou gestor do estabelecimento. Confirma o pagamento e o agendamento junto. */
     @Transactional
     public PagamentoResponse confirmarPagamento(UUID id) {
         Pagamento pagamento = encontrar(id);
+        usuarioLogado.verificarGestor(estabelecimentoDo(pagamento));
         exigirPendente(pagamento, "confirmados");
 
         pagamento.setStatus(PagamentoStatus.PAGO);
@@ -124,7 +142,7 @@ public class PagamentoService {
         return PagamentoResponse.from(pagamentoRepository.save(pagamento));
     }
 
-    /** Dono do agendamento ou ADMIN. */
+    /** Dono do agendamento, gestor do estabelecimento ou ADMIN. */
     @Transactional
     public PagamentoResponse cancelarPagamento(UUID id) {
         Pagamento pagamento = encontrar(id);
@@ -156,8 +174,16 @@ public class PagamentoService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Pagamento não encontrado"));
     }
 
+    /** Dono do agendamento, gestor do estabelecimento ou ADMIN. */
     private void verificarAcesso(Pagamento pagamento) {
-        usuarioLogado.verificarDonoOuAdmin(pagamento.getAgendamento().getUsuario().getId());
+        usuarioLogado.verificarDonoOuGestor(pagamento.getAgendamento().getUsuario().getId(), estabelecimentoDo(pagamento));
+    }
+
+    /** Pagamento -> agendamento -> horário -> quadra -> estabelecimento. */
+    private UUID estabelecimentoDo(Pagamento pagamento) {
+        return quadraRepository.findById(pagamento.getAgendamento().getHorario().getQuadraId())
+                .map(Quadra::getEstabelecimentoId)
+                .orElse(null);
     }
 
     private void exigirPendente(Pagamento pagamento, String acao) {

@@ -3,11 +3,14 @@ package com.example.SportFlow.Dto.Quadra;
 import com.example.SportFlow.Entity.Quadra;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Digits;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
 import java.math.BigDecimal;
+import java.util.Set;
 import java.util.UUID;
 
 public record QuadraRequest(
@@ -25,7 +28,11 @@ public record QuadraRequest(
         @Digits(integer = 8, fraction = 2, message = "Valor inválido (máx. 8 dígitos e 2 casas decimais)")
         BigDecimal valorHora,
 
-        Boolean ativo
+        Boolean ativo,
+
+        @Schema(description = "Ids dos esportes que a quadra aceita (pegue em GET /api/esportes)")
+        @NotEmpty(message = "Informe pelo menos um esporte que a quadra aceita")
+        Set<UUID> esporteIds
 ) {
     public Quadra toEntity() {
         Quadra q = new Quadra();
@@ -34,6 +41,7 @@ public record QuadraRequest(
         q.setDescricao(descricao);
         q.setValorHora(valorHora);
         q.setAtivo(ativo);
+        q.setEsporteIds(esporteIds);
         return q;
     }
 }

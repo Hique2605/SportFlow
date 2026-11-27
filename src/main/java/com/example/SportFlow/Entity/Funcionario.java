@@ -12,7 +12,9 @@ import java.time.ZoneOffset;
 import java.util.UUID;
 
 @Entity
-@Table(name = "funcionario")
+@Table(name = "funcionario", uniqueConstraints = @UniqueConstraint(
+        name = "uk_funcionario_usuario_estabelecimento",
+        columnNames = {"usuario_id", "estabelecimento_id"}))
 @Getter
 @NoArgsConstructor
 public class Funcionario {
@@ -23,7 +25,7 @@ public class Funcionario {
     private UUID id;
 
     @Setter
-    @Column(name = "usuario_id", nullable = false, unique = true)
+    @Column(name = "usuario_id", nullable = false)
     private UUID usuarioId;
 
     @Setter

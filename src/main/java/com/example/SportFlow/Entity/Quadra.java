@@ -1,6 +1,8 @@
 package com.example.SportFlow.Entity;
 
 import jakarta.persistence.*;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.UUID;
 import java.time.OffsetDateTime;
 import java.math.BigDecimal;
@@ -25,6 +27,15 @@ public class Quadra {
 
     @Column(nullable = false)
     private Boolean ativo;
+
+    /**
+     * Esportes que a quadra aceita (tabela quadra_esporte, migration V1.5).
+     * @ElementCollection guarda só os ids, no mesmo estilo de estabelecimentoId.
+     */
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(name = "quadra_esporte", joinColumns = @JoinColumn(name = "quadra_id"))
+    @Column(name = "esporte_id", nullable = false)
+    private Set<UUID> esporteIds = new HashSet<>();
 
     @Column(name = "criado_em", nullable = false, updatable = false)
     private OffsetDateTime criadoEm;
@@ -60,6 +71,13 @@ public class Quadra {
 
     public BigDecimal getValorHora() { return valorHora; }
     public void setValorHora(BigDecimal value) { this.valorHora = value; }
+
+    public Set<UUID> getEsporteIds() { return esporteIds; }
+    public void setEsporteIds(Set<UUID> value) {
+        // Mantém a MESMA coleção (o Hibernate acompanha as mudanças nela)
+        this.esporteIds.clear();
+        if (value != null) this.esporteIds.addAll(value);
+    }
 
     public Boolean getAtivo() { return ativo; }
     public void setAtivo(Boolean value) { this.ativo = value; }

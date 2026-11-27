@@ -17,6 +17,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.UUID;
+import java.time.Clock;
+import java.time.LocalDateTime;
 
 @Slf4j
 @Service
@@ -26,6 +28,7 @@ public class AvaliacaoService {
     private final AvaliacaoRepository avaliacaoRepository;
     private final AgendamentoRepository agendamentoRepository;
     private final UsuarioLogado usuarioLogado;
+    private final Clock relogio;
 
     @Transactional(readOnly = true)
     public List<AvaliacaoResponse> listar() {
@@ -47,6 +50,16 @@ public class AvaliacaoService {
 
         if (agendamento.getStatus() == StatusAgendamento.CANCELADO) {
             throw new IllegalStateException("Não é possível avaliar um agendamento cancelado");
+        }
+
+        // Só avalia quem jogou: reserva concluída, ou confirmada com o horário já encerrado
+        // (o encerramento automático roda a cada 5 minutos, então pode ainda não ter passado)
+        boolean jogoAconteceu = agendamento.getStatus() == StatusAgendamento.CONCLUIDO
+                || (agendamento.getStatus() == StatusAgendamento.CONFIRMADO
+                    && agendamento.jaTerminou(LocalDateTime.now(relogio)));
+        if (!jogoAconteceu) {
+            throw new IllegalStateException(
+                    "A avaliação só pode ser feita depois do jogo (reserva confirmada e horário já encerrado)");
         }
 
         if (avaliacaoRepository.existsByAgendamentoId(dto.agendamentoId())) {

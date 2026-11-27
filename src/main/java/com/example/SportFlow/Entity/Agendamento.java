@@ -9,6 +9,7 @@ import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.OffsetDateTime;
 import java.util.UUID;
+import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "agendamento")
@@ -63,4 +64,19 @@ public class Agendamento {
     @Column(name = "atualizado_em", nullable = false)
     @Builder.Default
     private OffsetDateTime atualizadoEm = OffsetDateTime.now();
+
+    /** Data + hora de início do jogo (horário local do estabelecimento). */
+    public LocalDateTime momentoInicio() {
+        return LocalDateTime.of(dataAgendamento, horaInicio);
+    }
+
+    /** Data + hora de término do jogo. */
+    public LocalDateTime momentoFim() {
+        return LocalDateTime.of(dataAgendamento, horaFim);
+    }
+
+    /** O jogo já terminou em relação ao instante informado? */
+    public boolean jaTerminou(LocalDateTime agora) {
+        return !momentoFim().isAfter(agora);
+    }
 }

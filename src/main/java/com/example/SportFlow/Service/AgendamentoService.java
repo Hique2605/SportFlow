@@ -32,6 +32,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import com.example.SportFlow.Repository.EstabelecimentoRepository;
+import java.time.Clock;
+import java.time.LocalDateTime;
 
 @Slf4j
 @Service
@@ -43,14 +46,21 @@ public class AgendamentoService {
     private final HorarioRepository horarioRepository;
     private final QuadraRepository quadraRepository;
     private final PagamentoRepository pagamentoRepository;
+    private final EstabelecimentoRepository estabelecimentoRepository;
     private final UsuarioLogado usuarioLogado;
+    private final Clock relogio;
+
+    /** Status que o encerramento automático procura. */
+    private static final List<StatusAgendamento> EM_ABERTO =
+            List.of(StatusAgendamento.PENDENTE, StatusAgendamento.CONFIRMADO);
 
     @Transactional
     public AgendamentoResponseDTO criar(AgendamentoRequestDTO dto) {
         UUID usuarioId = resolverUsuario(dto.usuarioId());
         Horario horario = buscarHorario(dto.horarioId());
+        Quadra quadra = travarQuadra(horario.getQuadraId());
 
-        validarRegras(dto, horario, null);
+        validarRegras(dto, horario, quadra, null);
 
         Agendamento entity = Agendamento.builder()
                 .usuario(buscarUsuario(usuarioId))
@@ -58,7 +68,7 @@ public class AgendamentoService {
                 .dataAgendamento(dto.dataAgendamento())
                 .horaInicio(dto.horaInicio())
                 .horaFim(dto.horaFim())
-                .valorTotal(calcularValor(horario, dto))
+                .valorTotal(calcularValor(quadra, dto))
                 .observacao(dto.observacao())
                 .build();
 
@@ -118,28 +128,46 @@ public class AgendamentoService {
         // CLIENTE não pode transferir o agendamento para outra pessoa
         UUID usuarioId = dto.usuarioId() == null ? entity.getUsuario().getId() : resolverUsuario(dto.usuarioId());
         Horario horario = buscarHorario(dto.horarioId());
+        Quadra quadra = travarQuadra(horario.getQuadraId());
 
-        validarRegras(dto, horario, id);
+        validarRegras(dto, horario, quadra, id);
 
         entity.setUsuario(buscarUsuario(usuarioId));
         entity.setHorario(horario);
         entity.setDataAgendamento(dto.dataAgendamento());
         entity.setHoraInicio(dto.horaInicio());
         entity.setHoraFim(dto.horaFim());
-        entity.setValorTotal(calcularValor(horario, dto));
+        entity.setValorTotal(calcularValor(quadra, dto));
         entity.setObservacao(dto.observacao());
         entity.setAtualizadoEm(OffsetDateTime.now());
 
         return AgendamentoResponseDTO.fromEntity(agendamentoRepository.save(entity));
     }
 
-    /** ADMIN ou gestor do estabelecimento da reserva. */
+    /**
+     * ADMIN ou gestor do estabelecimento da reserva.
+     * Só aceita as mudanças previstas no ciclo de vida (StatusAgendamento.podeIrPara):
+     *   PENDENTE -> CONFIRMADO/CANCELADO, CONFIRMADO -> CONCLUIDO/CANCELADO.
+     */
     @Transactional
     public AgendamentoResponseDTO atualizarStatus(UUID id, StatusAgendamento novoStatus) {
         Agendamento entity = buscarEntidade(id);
         usuarioLogado.verificarGestor(estabelecimentoDe(entity));
-        entity.setStatus(novoStatus);
-        entity.setAtualizadoEm(OffsetDateTime.now());
+        exigirTransicao(entity, novoStatus);
+
+        if (novoStatus == StatusAgendamento.CONCLUIDO && !entity.jaTerminou(agora())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "A reserva só pode ser concluída depois do horário de término ("
+                            + entity.getDataAgendamento() + " às " + entity.getHoraFim() + ")");
+        }
+
+        if (novoStatus == StatusAgendamento.CANCELADO) {
+            aplicarCancelamento(entity);
+        } else {
+            entity.setStatus(novoStatus);
+            entity.setAtualizadoEm(OffsetDateTime.now());
+        }
+
         log.info("Agendamento {} alterado para {}", id, novoStatus);
         return AgendamentoResponseDTO.fromEntity(agendamentoRepository.save(entity));
     }
@@ -149,22 +177,52 @@ public class AgendamentoService {
     public void cancelar(UUID id) {
         Agendamento entity = buscarEntidade(id);
         usuarioLogado.verificarDonoOuGestor(entity.getUsuario().getId(), estabelecimentoDe(entity));
+        exigirTransicao(entity, StatusAgendamento.CANCELADO);
 
-        if (entity.getStatus() == StatusAgendamento.CONCLUIDO) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "Agendamentos concluídos não podem ser cancelados");
-        }
-
-        entity.setStatus(StatusAgendamento.CANCELADO);
-        entity.setAtualizadoEm(OffsetDateTime.now());
+        aplicarCancelamento(entity);
         agendamentoRepository.save(entity);
-
-        pagamentoRepository.findByAgendamentoId(id)
-                .filter(p -> p.getStatus() == PagamentoStatus.PENDENTE)
-                .ifPresent(p -> p.setStatus(PagamentoStatus.CANCELADO));
 
         log.info("Agendamento {} cancelado pelo usuário {}", id, usuarioLogado.id());
     }
+
+    /**
+     * Encerramento automático (chamado pela tarefa agendada em AgendadorConfig).
+     * Reservas cujo horário de término já passou:
+     *   CONFIRMADO -> CONCLUIDO
+     *   PENDENTE   -> CANCELADO (e o pagamento pendente também é cancelado)
+     *
+     * Não depende de usuário logado: roda "em nome do sistema".
+     *
+     * @return quantas reservas foram concluídas e quantas canceladas
+     */
+    @Transactional
+    public ResultadoEncerramento encerrarAgendamentosPassados() {
+        LocalDateTime agora = agora();
+        int concluidos = 0;
+        int cancelados = 0;
+
+        for (Agendamento a : agendamentoRepository.findByStatusInAndDataAgendamentoLessThanEqual(EM_ABERTO, agora.toLocalDate())) {
+            if (!a.jaTerminou(agora)) {
+                continue; // é de hoje, mas ainda não terminou
+            }
+            if (a.getStatus() == StatusAgendamento.CONFIRMADO) {
+                a.setStatus(StatusAgendamento.CONCLUIDO);
+                a.setAtualizadoEm(OffsetDateTime.now());
+                concluidos++;
+            } else {
+                aplicarCancelamento(a);
+                cancelados++;
+            }
+        }
+
+        if (concluidos + cancelados > 0) {
+            log.info("Encerramento automático: {} reserva(s) concluída(s), {} pendente(s) cancelada(s)", concluidos, cancelados);
+        }
+        return new ResultadoEncerramento(concluidos, cancelados);
+    }
+
+    /** Resultado do encerramento automático (útil nos logs e nos testes). */
+    public record ResultadoEncerramento(int concluidos, int cancelados) {}
 
     /** Somente ADMIN (regra no SecurityConfig). */
     @Transactional
@@ -190,14 +248,33 @@ public class AgendamentoService {
         return usuarioIdInformado;
     }
 
-    private void validarRegras(AgendamentoRequestDTO dto, Horario horario, UUID ignorarId) {
+    private void validarRegras(AgendamentoRequestDTO dto, Horario horario, Quadra quadra, UUID ignorarId) {
         if (!dto.horaFim().isAfter(dto.horaInicio())) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "A hora de fim deve ser posterior à hora de início");
         }
 
+        // A data pode ser hoje, mas o horário não pode já ter começado
+        if (!LocalDateTime.of(dto.dataAgendamento(), dto.horaInicio()).isAfter(agora())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Não é possível reservar um horário que já começou ou já passou");
+        }
+
         if (!Boolean.TRUE.equals(horario.getAtivo())) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Este horário está inativo");
+        }
+
+        if (!Boolean.TRUE.equals(quadra.getAtivo())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "A quadra \"" + quadra.getNome() + "\" está inativa e não aceita reservas");
+        }
+
+        boolean estabelecimentoAtivo = estabelecimentoRepository.findById(quadra.getEstabelecimentoId())
+                .map(e -> Boolean.TRUE.equals(e.getAtivo()))
+                .orElse(false);
+        if (!estabelecimentoAtivo) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Este estabelecimento está inativo e não aceita reservas");
         }
 
         // DayOfWeek: 1 = segunda ... 7 = domingo  ->  % 7 deixa domingo = 0 (padrão da tabela horario)
@@ -224,14 +301,49 @@ public class AgendamentoService {
     }
 
     /** valor/hora da quadra x duração em horas (2 casas decimais). */
-    private BigDecimal calcularValor(Horario horario, AgendamentoRequestDTO dto) {
-        Quadra quadra = quadraRepository.findById(horario.getQuadraId())
-                .orElseThrow(() -> new EntityNotFoundException("Quadra não encontrada: " + horario.getQuadraId()));
-
+    private BigDecimal calcularValor(Quadra quadra, AgendamentoRequestDTO dto) {
         long minutos = Duration.between(dto.horaInicio(), dto.horaFim()).toMinutes();
         return quadra.getValorHora()
                 .multiply(BigDecimal.valueOf(minutos))
                 .divide(BigDecimal.valueOf(60), 2, RoundingMode.HALF_UP);
+    }
+
+    /**
+     * Trava a quadra (SELECT ... FOR UPDATE) e devolve a entidade.
+     * Enquanto esta transação não terminar, outra reserva da mesma quadra espera.
+     */
+    private Quadra travarQuadra(UUID quadraId) {
+        quadraRepository.travarParaReserva(quadraId)
+                .orElseThrow(() -> new EntityNotFoundException("Quadra não encontrada: " + quadraId));
+        return quadraRepository.findById(quadraId).orElseThrow();
+    }
+
+    /** 409 se a mudança de status não for permitida pelo ciclo de vida da reserva. */
+    private void exigirTransicao(Agendamento agendamento, StatusAgendamento novo) {
+        StatusAgendamento atual = agendamento.getStatus();
+        if (atual == novo) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "A reserva já está " + atual);
+        }
+        if (!atual.podeIrPara(novo)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Não é possível mudar uma reserva de " + atual + " para " + novo
+                            + (atual.isFinal() ? " (" + atual + " é um status final)" : ""));
+        }
+    }
+
+    /** Marca a reserva como CANCELADA e cancela o pagamento, se ainda estiver pendente. */
+    private void aplicarCancelamento(Agendamento agendamento) {
+        agendamento.setStatus(StatusAgendamento.CANCELADO);
+        agendamento.setAtualizadoEm(OffsetDateTime.now());
+
+        pagamentoRepository.findByAgendamentoId(agendamento.getId())
+                .filter(p -> p.getStatus() == PagamentoStatus.PENDENTE)
+                .ifPresent(p -> p.setStatus(PagamentoStatus.CANCELADO));
+    }
+
+    /** Agora, no fuso dos estabelecimentos (ver RelogioConfig). */
+    private LocalDateTime agora() {
+        return LocalDateTime.now(relogio);
     }
 
     /** Agendamento -> horário -> quadra -> estabelecimento. */

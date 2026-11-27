@@ -20,6 +20,9 @@ public interface AgendamentoRepository extends JpaRepository<Agendamento, UUID> 
 
     List<Agendamento> findByStatus(StatusAgendamento status);
 
+    /** Reservas em certos status com data até o dia informado (usado pelo encerramento automático). */
+    List<Agendamento> findByStatusInAndDataAgendamentoLessThanEqual(Collection<StatusAgendamento> status, LocalDate data);
+
     /** Agendamentos das quadras dos estabelecimentos informados (visão do gestor). */
     @Query("""
             SELECT a FROM Agendamento a

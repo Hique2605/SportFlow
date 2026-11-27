@@ -263,6 +263,30 @@ Códigos de erro da segurança: **401** sem token, token inválido/vencido ou se
 | Agendamento | `PENDENTE`, `CONFIRMADO`, `CANCELADO`, `CONCLUIDO` |
 | Pagamento | `PENDENTE`, `PAGO`, `CANCELADO`, `ESTORNADO` |
 
+## 🤖 Assistente de reservas com IA
+
+O cliente descreve o que quer jogar em linguagem natural ("beach tennis sábado à tarde até R$ 100") e o assistente devolve até 3 horários **livres de verdade**, cada um com um botão **Reservar** no front.
+
+**Como funciona (LangChain4j + Google Gemini):**
+
+1. `POST /api/ia/assistente` recebe a mensagem do usuário logado.
+2. O `AssistenteService` monta um `AiServices` com o modelo Gemini (`IAConfig`), a memória da conversa por usuário (`MemoriaAssistente`) e as ferramentas `@Tool` de `FerramentasReserva`.
+3. O Gemini decide quando chamar as ferramentas: `listarEsportes`, `listarEstabelecimentos`, `buscarHorariosLivres` e `minhasReservas`. Elas consultam o banco pelo `DisponibilidadeService`, então a IA não inventa horário nem preço.
+4. Cada opção encontrada recebe um código (OP1, OP2...). A IA responde citando os códigos e o backend troca cada código pelo horário real, conferindo de novo se ainda está livre.
+5. A IA **só sugere**: a reserva é feita pelo cliente no `POST /agendamentos` normal, com todas as validações.
+
+As instruções do assistente ficam em `src/main/resources/prompts/assistente-reservas.st`.
+
+**Configuração:** crie uma chave em https://aistudio.google.com/apikey e defina a variável de ambiente `GEMINI_API_KEY` (no IntelliJ: Run → Edit Configurations → Environment variables). O modelo fica em `sportflow.ia.modelo` no `application.properties`. Sem a chave, o resto do sistema funciona normalmente e o assistente responde 503.
+
+| Rota | Descrição |
+|---|---|
+| `GET /api/ia/assistente/status` | Informa se a IA está configurada |
+| `POST /api/ia/assistente` | Envia `{ "mensagem": "..." }` e recebe `{ mensagem, sugestoes[] }` |
+| `DELETE /api/ia/assistente` | Começa uma conversa nova |
+
+Limite: 10 mensagens por minuto por usuário (protege a cota gratuita do Gemini).
+
 ## 🧱 Arquitetura
 
 O projeto segue uma arquitetura em camadas, separando as responsabilidades HTTP, regras de negócio e acesso a dados:

@@ -1,7 +1,9 @@
 package com.example.SportFlow;
 
+import com.example.SportFlow.Entity.Agendamento;
 import com.example.SportFlow.Entity.Usuario;
 import com.example.SportFlow.Enum.Perfil;
+import com.example.SportFlow.Repository.AgendamentoRepository;
 import com.example.SportFlow.Repository.UsuarioRepository;
 import com.jayway.jsonpath.JsonPath;
 import org.junit.jupiter.api.BeforeEach;
@@ -20,6 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.temporal.TemporalAdjusters;
+import java.util.UUID;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -48,6 +51,9 @@ class CrudIntegrationTests {
 
     @Autowired
     private PasswordEncoder passwordEncoder;
+
+    @Autowired
+    private AgendamentoRepository agendamentoRepository;
 
     private String tokenAdmin;
     private String tokenCliente;
@@ -250,7 +256,20 @@ class CrudIntegrationTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("CONFIRMADO"));
 
-        // 4) cliente avalia
+        // 4) antes do jogo ainda não dá para avaliar -> 409
+        mockMvc.perform(com(post("/avaliacao"), tokenCliente)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"agendamentoId": "%s", "nota": 5}
+                                """.formatted(agendamentoId)))
+                .andExpect(status().isConflict());
+
+        // simula que o jogo já aconteceu (semana passada)
+        Agendamento jogado = agendamentoRepository.findById(UUID.fromString(agendamentoId)).orElseThrow();
+        jogado.setDataAgendamento(LocalDate.now().minusDays(7));
+        agendamentoRepository.saveAndFlush(jogado);
+
+        // depois do jogo, o cliente avalia
         mockMvc.perform(com(post("/avaliacao"), tokenCliente)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
@@ -402,10 +421,17 @@ class CrudIntegrationTests {
                 .andExpect(jsonPath("$.status").value("CONFIRMADO"));
 
         // O gestor muda o status da reserva; um estranho não vê nem muda
+        // (concluir antes do horário de término não é permitido -> 409; cancelar pode)
         mockMvc.perform(com(patch("/agendamentos/{id}/status", agendamento), tokenCliente)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"status": "CONCLUIDO"}
+                                """))
+                .andExpect(status().isConflict());
+        mockMvc.perform(com(patch("/agendamentos/{id}/status", agendamento), tokenCliente)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"status": "CANCELADO"}
                                 """))
                 .andExpect(status().isOk());
         String tokenEstranho = registrarELogar("Estranho", "estranho@teste.com");

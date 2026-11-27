@@ -25,6 +25,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.UUID;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 
 /**
  * Todos os métodos devolvem DTO montado DENTRO da transação.
@@ -57,9 +59,12 @@ public class PagamentoService {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Este agendamento já possui um pagamento");
         }
 
+        // O valor vem da reserva; o cliente não escolhe quanto paga
+        BigDecimal valor = exigirValorDaReserva(dto.valor(), agendamento);
+
         Pagamento novo = Pagamento.builder()
                 .agendamento(agendamento)
-                .valor(dto.valor())
+                .valor(valor)
                 .forma(dto.forma().trim())
                 .status(PagamentoStatus.PENDENTE)
                 .criadoEm(OffsetDateTime.now())
@@ -67,7 +72,7 @@ public class PagamentoService {
 
         Pagamento salvo = pagamentoRepository.save(novo);
         log.info("Pagamento {} criado para o agendamento {} ({} via {})",
-                salvo.getId(), agendamento.getId(), dto.valor(), dto.forma());
+                salvo.getId(), agendamento.getId(), valor, dto.forma());
         return PagamentoResponse.from(salvo);
     }
 
@@ -116,7 +121,7 @@ public class PagamentoService {
         Pagamento pagamento = encontrar(id);
         exigirPendente(pagamento, "alterados");
 
-        pagamento.setValor(dados.valor());
+        pagamento.setValor(exigirValorDaReserva(dados.valor(), pagamento.getAgendamento()));
         pagamento.setForma(dados.forma().trim());
 
         return PagamentoResponse.from(pagamentoRepository.save(pagamento));
@@ -184,6 +189,20 @@ public class PagamentoService {
         return quadraRepository.findById(pagamento.getAgendamento().getHorario().getQuadraId())
                 .map(Quadra::getEstabelecimentoId)
                 .orElse(null);
+    }
+
+    /**
+     * O pagamento tem que cobrir exatamente o valor da reserva.
+     * Sem valor informado -> usa o valorTotal. Valor diferente -> 400.
+     */
+    private BigDecimal exigirValorDaReserva(BigDecimal informado, Agendamento agendamento) {
+        BigDecimal esperado = agendamento.getValorTotal();
+        if (informado != null && informado.compareTo(esperado) != 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "O valor do pagamento deve ser igual ao valor da reserva: R$ "
+                            + esperado.setScale(2, RoundingMode.HALF_UP).toPlainString().replace('.', ','));
+        }
+        return esperado;
     }
 
     private void exigirPendente(Pagamento pagamento, String acao) {

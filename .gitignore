@@ -33,3 +33,7 @@ build/
 .vscode/
 
 /Claude outputs
+
+### Segredos locais (chave da IA) ###
+ia-local.properties
+Claude outputs/

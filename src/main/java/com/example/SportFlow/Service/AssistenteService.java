@@ -30,6 +30,8 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import dev.langchain4j.data.message.ChatMessage;
+import org.springframework.beans.factory.annotation.Qualifier;
 
 /**
  * Orquestra o assistente de reservas:
@@ -49,18 +51,25 @@ public class AssistenteService {
             DateTimeFormatter.ofPattern("EEEE, dd/MM/yyyy, HH:mm", Locale.of("pt", "BR"));
 
     private final ObjectProvider<ChatModel> chatModel;
+    private final ObjectProvider<ChatModel> chatModelReserva;
     private final DisponibilidadeService disponibilidade;
     private final MemoriaAssistente memoria;
     private final UsuarioLogado usuarioLogado;
     private final UsuarioRepository usuarioRepository;
     private final Clock relogio;
     private final String modelo;
+    private final String modeloReserva;
 
-    public AssistenteService(ObjectProvider<ChatModel> chatModel, DisponibilidadeService disponibilidade,
+    public AssistenteService(@Qualifier("chatModel") ObjectProvider<ChatModel> chatModel,
+                             @Qualifier("chatModelReserva") ObjectProvider<ChatModel> chatModelReserva,
+                             DisponibilidadeService disponibilidade,
                              MemoriaAssistente memoria, UsuarioLogado usuarioLogado,
                              UsuarioRepository usuarioRepository, Clock relogio,
-                             @Value("${sportflow.ia.modelo:}") String modelo) {
+                             @Value("${sportflow.ia.modelo:}") String modelo,
+                             @Value("${sportflow.ia.modelo-reserva:}") String modeloReserva) {
         this.chatModel = chatModel;
+        this.chatModelReserva = chatModelReserva;
+        this.modeloReserva = modeloReserva;
         this.disponibilidade = disponibilidade;
         this.memoria = memoria;
         this.usuarioLogado = usuarioLogado;
@@ -87,28 +96,58 @@ public class AssistenteService {
         }
 
         String nome = usuarioRepository.findById(usuarioId).map(u -> u.getNome()).orElse("cliente");
+        String hoje = LocalDateTime.now(relogio).format(HOJE);
 
+        // Guarda o histórico antes: se o modelo falhar no meio, desfaz o que entrou
+        // (senão a mensagem do usuário ficaria repetida na tentativa com o modelo reserva)
+        List<ChatMessage> historicoAntes = new ArrayList<>(memoria.get(usuarioId).messages());
+
+        String resposta;
+        try {
+            resposta = perguntar(modeloIA, usuarioId, mensagem, nome, hoje);
+        } catch (RuntimeException falhaPrincipal) {
+            ChatModel reserva = chatModelReserva.getIfAvailable();
+            if (reserva == null) throw traduzirErro(falhaPrincipal);
+
+            log.warn("Modelo principal ({}) falhou: {} -> tentando o modelo reserva ({})",
+                    modelo, resumo(falhaPrincipal), modeloReserva);
+            memoria.restaurar(usuarioId, historicoAntes);
+            try {
+                resposta = perguntar(reserva, usuarioId, mensagem, nome, hoje);
+            } catch (RuntimeException falhaReserva) {
+                memoria.restaurar(usuarioId, historicoAntes);
+                throw traduzirErro(falhaReserva);
+            }
+        }
+
+        return montarResposta(usuarioId, resposta == null ? "" : resposta);
+    }
+
+    /** Monta o AiServices (modelo + memória + ferramentas) e faz a pergunta. */
+    private String perguntar(ChatModel modeloIA, UUID usuarioId, String mensagem, String nome, String hoje) {
         AssistenteReservas assistente = AiServices.builder(AssistenteReservas.class)
                 .chatModel(modeloIA)
                 .chatMemoryProvider(memoria)
                 .tools(new FerramentasReserva(disponibilidade, memoria, usuarioId))
                 .build();
+        return assistente.conversar(usuarioId, mensagem.trim(), nome, hoje);
+    }
 
-        String resposta;
-        try {
-            resposta = assistente.conversar(usuarioId, mensagem.trim(), nome,
-                    LocalDateTime.now(relogio).format(HOJE));
-        } catch (RateLimitException e) {
-            log.warn("Gemini recusou por limite de uso: {}", e.getMessage());
-            throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS,
+    /** Erro do provedor -> resposta HTTP com mensagem amigável. */
+    private ResponseStatusException traduzirErro(RuntimeException e) {
+        if (e instanceof RateLimitException) {
+            log.warn("Gemini recusou por limite de uso: {}", resumo(e));
+            return new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS,
                     "O limite gratuito da IA foi atingido. Tente de novo em alguns instantes.");
-        } catch (RuntimeException e) {
-            log.error("Falha ao conversar com o Gemini", e);
-            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
-                    "O assistente está indisponível agora. Tente de novo em instantes.");
         }
+        log.error("Falha ao conversar com o Gemini", e);
+        return new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                "O assistente está indisponível agora (o serviço do Gemini pode estar sobrecarregado). Tente de novo em instantes.");
+    }
 
-        return montarResposta(usuarioId, resposta == null ? "" : resposta);
+    private static String resumo(Throwable e) {
+        String m = String.valueOf(e.getMessage()).replaceAll("\\s+", " ");
+        return m.length() > 160 ? m.substring(0, 160) + "..." : m;
     }
 
     public void novaConversa() {

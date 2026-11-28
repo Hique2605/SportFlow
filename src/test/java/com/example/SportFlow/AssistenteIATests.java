@@ -68,7 +68,7 @@ class AssistenteIATests {
 
     @TestConfiguration
     static class GeminiFalsoConfig {
-        @Bean
+        @Bean(name = "chatModel")
         ChatModel geminiFalso() {
             return new ChatModel() {
                 @Override

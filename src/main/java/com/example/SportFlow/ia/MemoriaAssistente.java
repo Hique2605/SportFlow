@@ -15,6 +15,8 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
+import dev.langchain4j.data.message.ChatMessage;
+import java.util.List;
 
 /**
  * O que o assistente lembra de cada usuário (em memória; some ao reiniciar o backend):
@@ -73,6 +75,13 @@ public class MemoriaAssistente implements ChatMemoryProvider {
             usos.addLast(agora);
             return true;
         }
+    }
+
+    /** Volta o histórico do usuário para uma cópia anterior (usado quando o modelo falha no meio). */
+    public void restaurar(UUID usuarioId, List<ChatMessage> mensagens) {
+        ChatMemory memoria = get(usuarioId);
+        memoria.clear();
+        mensagens.forEach(memoria::add);
     }
 
     /** "Nova conversa": apaga histórico e opções do usuário. */
